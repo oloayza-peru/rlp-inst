@@ -60,6 +60,13 @@ if "df_sst" not in st.session_state:
     st.session_state["df_ops_gen"] = df_ops_gen
     st.session_state["df_ops_cuota"] = df_ops_cuota
 
+def clean_unit_column(df):
+    if "UNIDAD" in df.columns:
+        df_copy = df.copy()
+        df_copy["UNIDAD"] = df_copy["UNIDAD"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+        return df_copy
+    return df
+
 def to_excel_download(df, sheet_name="Datos"):
     output = io.BytesIO()
     cols_to_drop = [c for c in ["Year_Temp", "Month_Temp", "Month_Num_Temp"] if c in df.columns]
@@ -92,9 +99,9 @@ def extract_year_month(df, date_col):
 
 def filter_df(df_in, years, months):
     df_out = df_in.copy()
-    if years and "Year_Temp" in df_out.columns:
+    if years and "Year_Temp" in df_out.columns and df_out["Year_Temp"].notnull().any():
         df_out = df_out[df_out["Year_Temp"].isin(years)]
-    if months and "Month_Temp" in df_out.columns:
+    if months and "Month_Temp" in df_out.columns and df_out["Month_Temp"].notnull().any():
         df_out = df_out[df_out["Month_Temp"].isin(months)]
     return df_out
 
@@ -321,7 +328,8 @@ with tab_inst:
     # --- SUBTAB 1: PLAN GENERAL ---
     with subtab_plan:
         st.subheader("Plan General de Instrumentación")
-        df_p_proc, years_p, months_p = extract_year_month(st.session_state["df_inst_plan"], "MES")
+        df_p_base = clean_unit_column(st.session_state["df_inst_plan"])
+        df_p_proc, years_p, months_p = extract_year_month(df_p_base, "MES")
         
         # Filtros
         c1, c2, c3 = st.columns(3)
@@ -330,13 +338,12 @@ with tab_inst:
         with c2:
             s_mp = st.multiselect("🗓️ Mes:", options=months_p, default=months_p, key="f_p_m")
         with c3:
-            units_plan = df_p_proc["UNIDAD"].dropna().astype(str).unique() if "UNIDAD" in df_p_proc.columns else []
-            units_plan_clean = [u for u in units_plan if u.strip().upper() != "MAX U 63"]
-            s_up = st.multiselect("Unidad:", options=units_plan_clean, key="f_p_u")
+            units_plan = sorted([u for u in df_p_proc["UNIDAD"].dropna().unique() if u and u.strip().upper() != "MAX U 63"]) if "UNIDAD" in df_p_proc.columns else []
+            s_up = st.multiselect("Unidad:", options=units_plan, key="f_p_u")
 
         df_p_filt = filter_df(df_p_proc, s_yp, s_mp)
         if s_up and "UNIDAD" in df_p_filt.columns:
-            df_p_filt = df_p_filt[df_p_filt["UNIDAD"].isin(s_up)]
+            df_p_filt = df_p_filt[df_p_filt["UNIDAD"].astype(str).isin([str(u) for u in s_up])]
 
         # Tarjetas de Indicadores KPI
         total_p_prog = len(df_p_filt)
@@ -385,9 +392,9 @@ with tab_inst:
     # --- SUBTAB 2: VÁLVULAS VAAR ---
     with subtab_vaar:
         st.subheader("Plan de Válvulas VAAR")
-        df_vaar_base = st.session_state["df_inst_vaar"]
+        df_vaar_base = clean_unit_column(st.session_state["df_inst_vaar"])
         if not df_vaar_base.empty and "TIPO" in df_vaar_base.columns:
-            df_vaar_base = df_vaar_base[df_vaar_base["TIPO"].str.contains("VAAR", case=False, na=False)]
+            df_vaar_base = df_vaar_base[df_vaar_base["TIPO"].astype(str).str.contains("VAAR", case=False, na=False)]
 
         df_v_proc, years_v, months_v = extract_year_month(df_vaar_base, "MES")
         
@@ -397,11 +404,12 @@ with tab_inst:
         with c2:
             s_mv = st.multiselect("🗓️ Mes:", options=months_v, default=months_v, key="f_v_m")
         with c3:
-            s_uv = st.multiselect("Unidad:", options=df_v_proc["UNIDAD"].unique() if "UNIDAD" in df_v_proc.columns else [], key="f_v_u")
+            units_vaar = sorted([u for u in df_v_proc["UNIDAD"].dropna().unique() if u]) if "UNIDAD" in df_v_proc.columns else []
+            s_uv = st.multiselect("Unidad:", options=units_vaar, key="f_v_u")
 
         df_v_filt = filter_df(df_v_proc, s_yv, s_mv)
         if s_uv and "UNIDAD" in df_v_filt.columns:
-            df_v_filt = df_v_filt[df_v_filt["UNIDAD"].isin(s_uv)]
+            df_v_filt = df_v_filt[df_v_filt["UNIDAD"].astype(str).isin([str(u) for u in s_uv])]
 
         total_v_prog = len(df_v_filt)
         total_v_ejec = int((df_v_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_v_filt.columns else 0
@@ -425,16 +433,16 @@ with tab_inst:
         cols_show_v = [c for c in df_v_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_v = st.data_editor(df_v_filt[cols_show_v], num_rows="dynamic", key="ed_v")
         if st.button("Guardar Válvulas VAAR"):
-            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("VAAR", case=False, na=False)]
+            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].astype(str).str.contains("VAAR", case=False, na=False)]
             st.session_state["df_inst_vaar"] = pd.concat([df_other, edited_v], ignore_index=True)
             st.success("Plan Válvulas VAAR guardado.")
 
     # --- SUBTAB 3: SENSORES DE VIBRACIÓN ---
     with subtab_sensores:
         st.subheader("Plan de Sensores de Vibración")
-        df_sens_base = st.session_state["df_inst_vaar"]
+        df_sens_base = clean_unit_column(st.session_state["df_inst_vaar"])
         if not df_sens_base.empty and "TIPO" in df_sens_base.columns:
-            df_sens_base = df_sens_base[df_sens_base["TIPO"].str.contains("SENSOR", case=False, na=False)]
+            df_sens_base = df_sens_base[df_sens_base["TIPO"].astype(str).str.contains("SENSOR", case=False, na=False)]
 
         df_s_proc, years_s, months_s = extract_year_month(df_sens_base, "MES")
         
@@ -444,11 +452,12 @@ with tab_inst:
         with c2:
             s_ms = st.multiselect("🗓️ Mes:", options=months_s, default=months_s, key="f_s_m")
         with c3:
-            s_us = st.multiselect("Unidad:", options=df_s_proc["UNIDAD"].unique() if "UNIDAD" in df_s_proc.columns else [], key="f_s_u")
+            units_sens = sorted([u for u in df_s_proc["UNIDAD"].dropna().unique() if u]) if "UNIDAD" in df_s_proc.columns else []
+            s_us = st.multiselect("Unidad:", options=units_sens, key="f_s_u")
 
         df_s_filt = filter_df(df_s_proc, s_ys, s_ms)
         if s_us and "UNIDAD" in df_s_filt.columns:
-            df_s_filt = df_s_filt[df_s_filt["UNIDAD"].isin(s_us)]
+            df_s_filt = df_s_filt[df_s_filt["UNIDAD"].astype(str).isin([str(u) for u in s_us])]
 
         total_s_prog = len(df_s_filt)
         total_s_ejec = int((df_s_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_s_filt.columns else 0
@@ -472,7 +481,7 @@ with tab_inst:
         cols_show_s = [c for c in df_s_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_s = st.data_editor(df_s_filt[cols_show_s], num_rows="dynamic", key="ed_s")
         if st.button("Guardar Sensores"):
-            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("SENSOR", case=False, na=False)]
+            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].astype(str).str.contains("SENSOR", case=False, na=False)]
             st.session_state["df_inst_vaar"] = pd.concat([df_other, edited_s], ignore_index=True)
             st.success("Plan Sensores guardado.")
 
