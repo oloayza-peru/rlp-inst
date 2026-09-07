@@ -230,7 +230,6 @@ def plot_monthly_trend(
 
   fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-  # Traza de Barras (Programados) con etiquetas de datos
   fig.add_trace(
       go.Bar(
           x=df_grouped["Mes_Periodo"],
@@ -240,11 +239,12 @@ def plot_monthly_trend(
           opacity=0.7,
           text=df_grouped["Programados"],
           textposition="outside",
+          textfont=dict(size=12),
+          cliponaxis=False,
       ),
       secondary_y=False,
   )
 
-  # Traza de Líneas (Inspeccionados) con etiquetas de datos superiores
   fig.add_trace(
       go.Scatter(
           x=df_grouped["Mes_Periodo"],
@@ -256,6 +256,7 @@ def plot_monthly_trend(
           textfont=dict(size=12, color="black"),
           line=dict(color="#2ca02c", width=3),
           marker=dict(size=8),
+          cliponaxis=False,
       ),
       secondary_y=True,
   )
@@ -263,16 +264,24 @@ def plot_monthly_trend(
   fig.update_layout(
       title_text=title,
       xaxis_title="Mes",
+      margin=dict(t=50, b=40, l=40, r=40),
       legend=dict(
-          orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+          orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1
       ),
       hovermode="x unified",
   )
 
+  fig.update_xaxes(tickfont=dict(size=12))
   fig.update_yaxes(
-      title_text="Cant. Instrumentos Programados", secondary_y=False
+      title_text="Cant. Instrumentos Programados",
+      secondary_y=False,
+      tickfont=dict(size=12),
   )
-  fig.update_yaxes(title_text="Cant. Instrumentos al 100%", secondary_y=True)
+  fig.update_yaxes(
+      title_text="Cant. Instrumentos al 100%",
+      secondary_y=True,
+      tickfont=dict(size=12),
+  )
 
   return fig
 
@@ -365,8 +374,11 @@ with tab_resumen:
         and "TIPO" in df_inst_r.columns
         and "AVANCE DE CAMPO" in df_inst_r.columns
     ):
+      df_inst_clean = df_inst_r[
+          df_inst_r["UNIDAD"].astype(str).str.upper() != "MAX U 63"
+      ]
       fig_inst_summary = px.histogram(
-          df_inst_r,
+          df_inst_clean,
           x="UNIDAD",
           y="AVANCE DE CAMPO",
           color="TIPO",
@@ -379,7 +391,11 @@ with tab_resumen:
           },
           text_auto=".2f",
       )
-      fig_inst_summary.update_traces(textposition="outside")
+      fig_inst_summary.update_traces(
+          textposition="outside", textfont_size=12, cliponaxis=False
+      )
+      fig_inst_summary.update_xaxes(tickfont=dict(size=12))
+      fig_inst_summary.update_yaxes(tickfont=dict(size=12))
       st.plotly_chart(fig_inst_summary, use_container_width=True)
 
   with c2:
@@ -391,6 +407,9 @@ with tab_resumen:
               "Distribución de Observaciones de Seguridad (OPS) por Gravedad"
           ),
           hole=0.4,
+      )
+      fig_ops_pie.update_traces(
+          textinfo="percent+label", textfont_size=12, insidetextorientation="radial"
       )
       st.plotly_chart(fig_ops_pie, use_container_width=True)
 
@@ -441,7 +460,11 @@ with tab_sst:
           labels={"% Cumplimiento": "Cumplimiento (0.0 a 1.0)"},
           text_auto=".2f",
       )
-      fig_sst_bar.update_traces(textposition="outside")
+      fig_sst_bar.update_traces(
+          textposition="outside", textfont_size=12, cliponaxis=False
+      )
+      fig_sst_bar.update_xaxes(tickfont=dict(size=12))
+      fig_sst_bar.update_yaxes(tickfont=dict(size=12))
       st.plotly_chart(fig_sst_bar, use_container_width=True)
     with c2:
       avg_val = (
@@ -522,7 +545,6 @@ with tab_inst:
     df_p_base = clean_unit_column(st.session_state["df_inst_plan"])
     df_p_proc, years_p, months_p = extract_year_month(df_p_base, "MES")
 
-    # Filtros
     c1, c2, c3 = st.columns(3)
     with c1:
       s_yp = st.multiselect(
@@ -537,7 +559,7 @@ with tab_inst:
           sorted([
               u
               for u in df_p_proc["UNIDAD"].dropna().unique()
-              if u and u.strip().upper() != "MAX U 63"
+              if u and str(u).strip().upper() != "MAX U 63"
           ])
           if "UNIDAD" in df_p_proc.columns
           else []
@@ -550,7 +572,6 @@ with tab_inst:
           df_p_filt["UNIDAD"].astype(str).isin([str(u) for u in s_up])
       ]
 
-    # Tarjetas de Indicadores KPI
     total_p_prog = len(df_p_filt)
     total_p_ejec = (
         int((df_p_filt["AVANCE DE CAMPO"] == 1).sum())
@@ -567,7 +588,6 @@ with tab_inst:
     m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_p_avance:.1f}%")
     st.markdown("---")
 
-    # Gráfica de Tendencia Mensual (Doble Eje Y) con Etiquetas de Datos
     fig_p_monthly = plot_monthly_trend(
         df_p_filt,
         title=(
@@ -578,13 +598,11 @@ with tab_inst:
     if fig_p_monthly:
       st.plotly_chart(fig_p_monthly, use_container_width=True)
 
-    # Gráfica de Avance por Unidad con Etiquetas de Datos visibles
     if not df_p_filt.empty and "UNIDAD" in df_p_filt.columns:
       df_p_chart = df_p_filt.copy()
       df_p_chart["UNIDAD_NUM"] = pd.to_numeric(
           df_p_chart["UNIDAD"], errors="coerce"
       )
-
       df_p_chart = df_p_chart[
           (df_p_chart["UNIDAD_NUM"] >= 0) & (df_p_chart["UNIDAD_NUM"] <= 70)
       ]
@@ -600,25 +618,21 @@ with tab_inst:
             labels={"UNIDAD_NUM": "UNIDAD"},
             text_auto=True,
         )
-
-        # 1. AJUSTE DE ETIQUETAS (Data Labels arriba y mismo tamaño que los ejes)
-        TAMANO_FUENTE_EJES = 12
         fig_p.update_traces(
-            textposition="outside", textfont_size=TAMANO_FUENTE_EJES
+            textposition="outside", textfont_size=12, cliponaxis=False
         )
         fig_p.update_xaxes(
-            range=[0, 70], dtick=10, tickfont=dict(size=TAMANO_FUENTE_EJES)
+            range=[0, 70], dtick=5, tickfont=dict(size=12), title="Unidad"
         )
-        fig_p.update_yaxes(tickfont=dict(size=TAMANO_FUENTE_EJES))
-
+        fig_p.update_yaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_p, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Detalle de los Instrumentos")
 
-    # 2. CUADRO DE BÚSQUEDA MULTICOLUMNA PARA FILTRAR EL DETALLE
     busqueda_p = st.text_input(
-        "🔍 Buscar por TAG, Unidad o Comentario:", key="search_p"
+        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
+        key="search_p",
     )
 
     cols_show_p = [
@@ -630,14 +644,11 @@ with tab_inst:
 
     if busqueda_p:
       term = str(busqueda_p).lower()
-      cond_tag = df_p_tabla["TAG"].astype(str).str.lower().str.contains(term)
-      cond_unidad = (
-          df_p_tabla["UNIDAD"].astype(str).str.lower().str.contains(term)
+      mask = df_p_tabla.apply(
+          lambda row: row.astype(str).str.lower().str.contains(term).any(),
+          axis=1,
       )
-      cond_com = (
-          df_p_tabla["COMENTARIO"].astype(str).str.lower().str.contains(term)
-      )
-      df_p_tabla = df_p_tabla[cond_tag | cond_unidad | cond_com]
+      df_p_tabla = df_p_tabla[mask]
 
     edited_p = st.data_editor(df_p_tabla, num_rows="dynamic", key="ed_p")
     if st.button("Guardar Plan General"):
@@ -668,7 +679,11 @@ with tab_inst:
       )
     with c3:
       units_vaar = (
-          sorted([u for u in df_v_proc["UNIDAD"].dropna().unique() if u])
+          sorted([
+              u
+              for u in df_v_proc["UNIDAD"].dropna().unique()
+              if u and str(u).strip().upper() != "MAX U 63"
+          ])
           if "UNIDAD" in df_v_proc.columns
           else []
       )
@@ -707,8 +722,11 @@ with tab_inst:
       st.plotly_chart(fig_v_monthly, use_container_width=True)
 
     if not df_v_filt.empty:
+      df_v_chart = df_v_filt[
+          df_v_filt["UNIDAD"].astype(str).str.upper() != "MAX U 63"
+      ]
       fig_v = px.bar(
-          df_v_filt,
+          df_v_chart,
           x="UNIDAD",
           y="AVANCE DE CAMPO",
           color="TAG",
@@ -716,18 +734,18 @@ with tab_inst:
           barmode="group",
           text_auto=True,
       )
-      TAMANO_FUENTE_EJES = 12
       fig_v.update_traces(
-          textposition="outside", textfont_size=TAMANO_FUENTE_EJES
+          textposition="outside", textfont_size=12, cliponaxis=False
       )
-      fig_v.update_xaxes(tickfont=dict(size=TAMANO_FUENTE_EJES))
-      fig_v.update_yaxes(tickfont=dict(size=TAMANO_FUENTE_EJES))
+      fig_v.update_xaxes(tickfont=dict(size=12))
+      fig_v.update_yaxes(tickfont=dict(size=12))
       st.plotly_chart(fig_v, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Detalle de Válvulas VAAR")
     busqueda_v = st.text_input(
-        "🔍 Buscar por TAG, Unidad o Comentario:", key="search_v"
+        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
+        key="search_v",
     )
 
     cols_show_v = [
@@ -739,14 +757,11 @@ with tab_inst:
 
     if busqueda_v:
       term = str(busqueda_v).lower()
-      cond_tag = df_v_tabla["TAG"].astype(str).str.lower().str.contains(term)
-      cond_unidad = (
-          df_v_tabla["UNIDAD"].astype(str).str.lower().str.contains(term)
+      mask = df_v_tabla.apply(
+          lambda row: row.astype(str).str.lower().str.contains(term).any(),
+          axis=1,
       )
-      cond_com = (
-          df_v_tabla["COMENTARIO"].astype(str).str.lower().str.contains(term)
-      )
-      df_v_tabla = df_v_tabla[cond_tag | cond_unidad | cond_com]
+      df_v_tabla = df_v_tabla[mask]
 
     edited_v = st.data_editor(df_v_tabla, num_rows="dynamic", key="ed_v")
     if st.button("Guardar Válvulas VAAR"):
@@ -784,7 +799,11 @@ with tab_inst:
       )
     with c3:
       units_sens = (
-          sorted([u for u in df_s_proc["UNIDAD"].dropna().unique() if u])
+          sorted([
+              u
+              for u in df_s_proc["UNIDAD"].dropna().unique()
+              if u and str(u).strip().upper() != "MAX U 63"
+          ])
           if "UNIDAD" in df_s_proc.columns
           else []
       )
@@ -823,8 +842,11 @@ with tab_inst:
       st.plotly_chart(fig_s_monthly, use_container_width=True)
 
     if not df_s_filt.empty:
+      df_s_chart = df_s_filt[
+          df_s_filt["UNIDAD"].astype(str).str.upper() != "MAX U 63"
+      ]
       fig_s = px.bar(
-          df_s_filt,
+          df_s_chart,
           x="UNIDAD",
           y="AVANCE DE CAMPO",
           color="TAG",
@@ -832,18 +854,18 @@ with tab_inst:
           barmode="group",
           text_auto=True,
       )
-      TAMANO_FUENTE_EJES = 12
       fig_s.update_traces(
-          textposition="outside", textfont_size=TAMANO_FUENTE_EJES
+          textposition="outside", textfont_size=12, cliponaxis=False
       )
-      fig_s.update_xaxes(tickfont=dict(size=TAMANO_FUENTE_EJES))
-      fig_s.update_yaxes(tickfont=dict(size=TAMANO_FUENTE_EJES))
+      fig_s.update_xaxes(tickfont=dict(size=12))
+      fig_s.update_yaxes(tickfont=dict(size=12))
       st.plotly_chart(fig_s, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Detalle de Sensores de Vibración")
     busqueda_s = st.text_input(
-        "🔍 Buscar por TAG, Unidad o Comentario:", key="search_s"
+        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
+        key="search_s",
     )
 
     cols_show_s = [
@@ -855,14 +877,11 @@ with tab_inst:
 
     if busqueda_s:
       term = str(busqueda_s).lower()
-      cond_tag = df_s_tabla["TAG"].astype(str).str.lower().str.contains(term)
-      cond_unidad = (
-          df_s_tabla["UNIDAD"].astype(str).str.lower().str.contains(term)
+      mask = df_s_tabla.apply(
+          lambda row: row.astype(str).str.lower().str.contains(term).any(),
+          axis=1,
       )
-      cond_com = (
-          df_s_tabla["COMENTARIO"].astype(str).str.lower().str.contains(term)
-      )
-      df_s_tabla = df_s_tabla[cond_tag | cond_unidad | cond_com]
+      df_s_tabla = df_s_tabla[mask]
 
     edited_s = st.data_editor(df_s_tabla, num_rows="dynamic", key="ed_s")
     if st.button("Guardar Sensores"):
@@ -937,6 +956,11 @@ with tab_acc:
             title="Eventos Registrados por Ubicación / Área Planta",
             hole=0.3,
         )
+        fig_acc_loc.update_traces(
+            textinfo="percent+label",
+            textfont_size=12,
+            insidetextorientation="radial",
+        )
         st.plotly_chart(fig_acc_loc, use_container_width=True)
     with c2:
       if (
@@ -950,7 +974,11 @@ with tab_acc:
             title="Eventos Clasificados por Tipo",
             text_auto=True,
         )
-        fig_acc_tipo.update_traces(textposition="outside")
+        fig_acc_tipo.update_traces(
+            textposition="outside", textfont_size=12, cliponaxis=False
+        )
+        fig_acc_tipo.update_xaxes(tickfont=dict(size=12))
+        fig_acc_tipo.update_yaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_acc_tipo, use_container_width=True)
 
   st.subheader("Bitácora y Detalle de Incidentes")
@@ -1028,6 +1056,9 @@ with tab_ops:
             barmode="stack",
             text_auto=True,
         )
+        fig_ops_area.update_traces(textfont_size=12)
+        fig_ops_area.update_xaxes(tickfont=dict(size=12))
+        fig_ops_area.update_yaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_ops_area, use_container_width=True)
     with c2:
       if "OBSERVADOR" in df_ops_filtered.columns:
@@ -1038,7 +1069,11 @@ with tab_ops:
             color_discrete_sequence=["#2ca02c"],
             text_auto=True,
         )
-        fig_ops_obs.update_traces(textposition="outside")
+        fig_ops_obs.update_traces(
+            textposition="outside", textfont_size=12, cliponaxis=False
+        )
+        fig_ops_obs.update_xaxes(tickfont=dict(size=12))
+        fig_ops_obs.update_yaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_ops_obs, use_container_width=True)
 
   st.subheader("Matriz de Observaciones Generadas (OPS)")
