@@ -68,7 +68,6 @@ def to_excel_download(df, sheet_name="Datos"):
         df_clean.to_excel(writer, index=False, sheet_name=sheet_name)
     return output.getvalue()
 
-# Helper para extraer Años y Meses formateados
 def extract_year_month(df, date_col):
     df_copy = df.copy()
     if df_copy.empty or date_col not in df_copy.columns:
@@ -99,7 +98,6 @@ def filter_df(df_in, years, months):
         df_out = df_out[df_out["Month_Temp"].isin(months)]
     return df_out
 
-# Función para generar la gráfica con doble eje Y (Mes vs Programados vs Inspeccionados)
 def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Programados vs. Inspeccionados (100%)"):
     if df_input.empty or date_col not in df_input.columns:
         return None
@@ -111,19 +109,15 @@ def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Progr
     if df_temp.empty:
         return None
 
-    # Formato Año-Mes para orden numérico y visualización
     df_temp["Mes_Periodo"] = df_temp["Fecha_DT"].dt.to_period("M").astype(str)
     
-    # Agrupación mensual
     df_grouped = df_temp.groupby("Mes_Periodo").agg(
         Programados=('TAG', 'count'),
         Inspeccionados=('AVANCE DE CAMPO', lambda x: (x == 1).sum())
     ).reset_index()
 
-    # Creación de figura con eje Y secundario
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Eje Y1: Programados (Barras)
     fig.add_trace(
         go.Bar(
             x=df_grouped["Mes_Periodo"],
@@ -135,7 +129,6 @@ def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Progr
         secondary_y=False
     )
 
-    # Eje Y2: Inspeccionados 100% (Línea con marcadores)
     fig.add_trace(
         go.Scatter(
             x=df_grouped["Mes_Periodo"],
@@ -328,7 +321,10 @@ with tab_inst:
         with c2:
             s_mp = st.multiselect("🗓️ Mes:", options=months_p, default=months_p, key="f_p_m")
         with c3:
-            s_up = st.multiselect("Unidad:", options=df_p_proc["UNIDAD"].unique() if "UNIDAD" in df_p_proc.columns else [], key="f_p_u")
+            # Filtrar unidades eliminando 'MAX U 63'
+            units_plan = df_p_proc["UNIDAD"].dropna().astype(str).unique() if "UNIDAD" in df_p_proc.columns else []
+            units_plan_clean = [u for u in units_plan if u.strip().upper() != "MAX U 63"]
+            s_up = st.multiselect("Unidad:", options=units_plan_clean, key="f_p_u")
 
         df_p_filt = filter_df(df_p_proc, s_yp, s_mp)
         if s_up and "UNIDAD" in df_p_filt.columns:
@@ -350,9 +346,19 @@ with tab_inst:
         if fig_p_monthly:
             st.plotly_chart(fig_p_monthly, use_container_width=True)
 
-        if not df_p_filt.empty:
-            fig_p = px.bar(df_p_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TIPO", title="Avance Plan General por Unidad", barmode="group")
-            st.plotly_chart(fig_p, use_container_width=True)
+        # Gráfica de Avance por Unidad EXCLUYENDO "MAX U 63"
+        if not df_p_filt.empty and "UNIDAD" in df_p_filt.columns:
+            df_p_chart = df_p_filt[df_p_filt["UNIDAD"].astype(str).str.strip().str.upper() != "MAX U 63"]
+            if not df_p_chart.empty:
+                fig_p = px.bar(
+                    df_p_chart, 
+                    x="UNIDAD", 
+                    y="AVANCE DE CAMPO", 
+                    color="TIPO", 
+                    title="Avance Plan General por Unidad (Excluye MAX U 63)", 
+                    barmode="group"
+                )
+                st.plotly_chart(fig_p, use_container_width=True)
 
         cols_show_p = [c for c in df_p_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_p = st.data_editor(df_p_filt[cols_show_p], num_rows="dynamic", key="ed_p")
