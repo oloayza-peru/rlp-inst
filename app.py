@@ -630,30 +630,20 @@ with tab_inst:
     st.markdown("---")
     st.subheader("Detalle de los Instrumentos")
 
-    busqueda_p = st.text_input(
-        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
-        key="search_p",
+    event_p = st.dataframe(
+        df_p_filt[
+            [
+                c
+                for c in df_p_filt.columns
+                if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
+            ]
+        ],
+        use_container_width=True,
+        hide_index=False,
+        on_select="rerun",
+        selection_mode="multi-row",
+        key="df_plan_head",
     )
-
-    cols_show_p = [
-        c
-        for c in df_p_filt.columns
-        if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
-    ]
-    df_p_tabla = df_p_filt[cols_show_p].copy()
-
-    if busqueda_p:
-      term = str(busqueda_p).lower()
-      mask = df_p_tabla.apply(
-          lambda row: row.astype(str).str.lower().str.contains(term).any(),
-          axis=1,
-      )
-      df_p_tabla = df_p_tabla[mask]
-
-    edited_p = st.data_editor(df_p_tabla, num_rows="dynamic", key="ed_p")
-    if st.button("Guardar Plan General"):
-      st.session_state["df_inst_plan"] = edited_p
-      st.success("Plan General guardado.")
 
   # --- SUBTAB 2: VÁLVULAS VAAR ---
   with subtab_vaar:
@@ -743,37 +733,21 @@ with tab_inst:
 
     st.markdown("---")
     st.subheader("Detalle de Válvulas VAAR")
-    busqueda_v = st.text_input(
-        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
-        key="search_v",
+
+    event_v = st.dataframe(
+        df_v_filt[
+            [
+                c
+                for c in df_v_filt.columns
+                if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
+            ]
+        ],
+        use_container_width=True,
+        hide_index=False,
+        on_select="rerun",
+        selection_mode="multi-row",
+        key="df_vaar_head",
     )
-
-    cols_show_v = [
-        c
-        for c in df_v_filt.columns
-        if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
-    ]
-    df_v_tabla = df_v_filt[cols_show_v].copy()
-
-    if busqueda_v:
-      term = str(busqueda_v).lower()
-      mask = df_v_tabla.apply(
-          lambda row: row.astype(str).str.lower().str.contains(term).any(),
-          axis=1,
-      )
-      df_v_tabla = df_v_tabla[mask]
-
-    edited_v = st.data_editor(df_v_tabla, num_rows="dynamic", key="ed_v")
-    if st.button("Guardar Válvulas VAAR"):
-      df_other = st.session_state["df_inst_vaar"][
-          ~st.session_state["df_inst_vaar"]["TIPO"]
-          .astype(str)
-          .str.contains("VAAR", case=False, na=False)
-      ]
-      st.session_state["df_inst_vaar"] = pd.concat(
-          [df_other, edited_v], ignore_index=True
-      )
-      st.success("Plan Válvulas VAAR guardado.")
 
   # --- SUBTAB 3: SENSORES DE VIBRACIÓN ---
   with subtab_sensores:
@@ -863,37 +837,21 @@ with tab_inst:
 
     st.markdown("---")
     st.subheader("Detalle de Sensores de Vibración")
-    busqueda_s = st.text_input(
-        "🔍 Buscar por cualquier campo (TAG, Unidad, Tipo, Comentario, etc.):",
-        key="search_s",
+
+    event_s = st.dataframe(
+        df_s_filt[
+            [
+                c
+                for c in df_s_filt.columns
+                if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
+            ]
+        ],
+        use_container_width=True,
+        hide_index=False,
+        on_select="rerun",
+        selection_mode="multi-row",
+        key="df_sens_head",
     )
-
-    cols_show_s = [
-        c
-        for c in df_s_filt.columns
-        if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
-    ]
-    df_s_tabla = df_s_filt[cols_show_s].copy()
-
-    if busqueda_s:
-      term = str(busqueda_s).lower()
-      mask = df_s_tabla.apply(
-          lambda row: row.astype(str).str.lower().str.contains(term).any(),
-          axis=1,
-      )
-      df_s_tabla = df_s_tabla[mask]
-
-    edited_s = st.data_editor(df_s_tabla, num_rows="dynamic", key="ed_s")
-    if st.button("Guardar Sensores"):
-      df_other = st.session_state["df_inst_vaar"][
-          ~st.session_state["df_inst_vaar"]["TIPO"]
-          .astype(str)
-          .str.contains("SENSOR", case=False, na=False)
-      ]
-      st.session_state["df_inst_vaar"] = pd.concat(
-          [df_other, edited_s], ignore_index=True
-      )
-      st.success("Plan Sensores guardado.")
 
   st.markdown("---")
   df_inst_download = pd.concat(
