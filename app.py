@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import io
 
 # ---------------------------------------------------------
@@ -61,7 +62,7 @@ if "df_sst" not in st.session_state:
 
 def to_excel_download(df, sheet_name="Datos"):
     output = io.BytesIO()
-    cols_to_drop = [c for c in ["Year_Temp", "Month_Temp"] if c in df.columns]
+    cols_to_drop = [c for c in ["Year_Temp", "Month_Temp", "Month_Num_Temp"] if c in df.columns]
     df_clean = df.drop(columns=cols_to_drop)
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_clean.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -73,11 +74,13 @@ def extract_year_month(df, date_col):
     if df_copy.empty or date_col not in df_copy.columns:
         df_copy["Year_Temp"] = None
         df_copy["Month_Temp"] = None
+        df_copy["Month_Num_Temp"] = None
         return df_copy, [], []
     
     dates = pd.to_datetime(df_copy[date_col], errors='coerce')
     df_copy["Year_Temp"] = dates.dt.year.astype("Int64")
     df_copy["Month_Temp"] = dates.dt.month_name()
+    df_copy["Month_Num_Temp"] = dates.dt.month
     
     years = sorted([int(y) for y in df_copy["Year_Temp"].dropna().unique()])
     
@@ -95,6 +98,69 @@ def filter_df(df_in, years, months):
     if months and "Month_Temp" in df_out.columns:
         df_out = df_out[df_out["Month_Temp"].isin(months)]
     return df_out
+
+# Función para generar la gráfica con doble eje Y (Mes vs Programados vs Inspeccionados)
+def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Programados vs. Inspeccionados (100%)"):
+    if df_input.empty or date_col not in df_input.columns:
+        return None
+    
+    df_temp = df_input.copy()
+    df_temp["Fecha_DT"] = pd.to_datetime(df_temp[date_col], errors='coerce')
+    df_temp = df_temp.dropna(subset=["Fecha_DT"])
+    
+    if df_temp.empty:
+        return None
+
+    # Formato Año-Mes para orden numérico y visualización
+    df_temp["Mes_Periodo"] = df_temp["Fecha_DT"].dt.to_period("M").astype(str)
+    
+    # Agrupación mensual
+    df_grouped = df_temp.groupby("Mes_Periodo").agg(
+        Programados=('TAG', 'count'),
+        Inspeccionados=('AVANCE DE CAMPO', lambda x: (x == 1).sum())
+    ).reset_index()
+
+    # Creación de figura con eje Y secundario
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Eje Y1: Programados (Barras)
+    fig.add_trace(
+        go.Bar(
+            x=df_grouped["Mes_Periodo"],
+            y=df_grouped["Programados"],
+            name="Programados",
+            marker_color="#1f77b4",
+            opacity=0.7
+        ),
+        secondary_y=False
+    )
+
+    # Eje Y2: Inspeccionados 100% (Línea con marcadores)
+    fig.add_trace(
+        go.Scatter(
+            x=df_grouped["Mes_Periodo"],
+            y=df_grouped["Inspeccionados"],
+            name="Inspeccionados (100%)",
+            mode="lines+markers+text",
+            text=df_grouped["Inspeccionados"],
+            textposition="top center",
+            line=dict(color="#2ca02c", width=3),
+            marker=dict(size=8)
+        ),
+        secondary_y=True
+    )
+
+    fig.update_layout(
+        title_text=title,
+        xaxis_title="Mes",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified"
+    )
+    
+    fig.update_yaxes(title_text="Cant. Instrumentos Programados", secondary_y=False)
+    fig.update_yaxes(title_text="Cant. Instrumentos al 100%", secondary_y=True)
+
+    return fig
 
 # ---------------------------------------------------------
 # PESTAÑAS PRINCIPALES
@@ -216,7 +282,7 @@ with tab_sst:
             st.plotly_chart(fig_gauge, use_container_width=True)
             
     st.subheader("Edición y Gestión de Registros SST")
-    cols_to_show = [c for c in df_sst_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    cols_to_show = [c for c in df_sst_filtered.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
     edited_sst = st.data_editor(df_sst_filtered[cols_to_show], num_rows="dynamic", key="editor_sst")
     if st.button("Guardar Cambios SST"):
         st.session_state["df_sst"] = edited_sst
@@ -230,7 +296,7 @@ with tab_sst:
     )
 
 # =========================================================
-# PESTAÑA 3: PLAN INSTRUMENTACIÓN (SEGREGADO CON INDICADORES EN PARTE SUPERIOR)
+# PESTAÑA 3: PLAN INSTRUMENTACIÓN
 # =========================================================
 with tab_inst:
     st.header("Plan de Inspección de Instrumentación, Válvulas y Sensores")
@@ -244,7 +310,6 @@ with tab_inst:
             st.session_state["df_inst_vaar"] = pd.read_excel(uploaded_inst, sheet_name="Válvulas VAAR- Sensores")
         st.success("Matriz de Instrumentación cargada con éxito.")
 
-    # Sub-pestañas para segregación por Plan
     subtab_plan, subtab_vaar, subtab_sensores = st.tabs([
         "📋 Plan General",
         "🚰 Válvulas VAAR",
@@ -269,22 +334,27 @@ with tab_inst:
         if s_up and "UNIDAD" in df_p_filt.columns:
             df_p_filt = df_p_filt[df_p_filt["UNIDAD"].isin(s_up)]
 
-        # --- INDICADORES DINÁMICOS ---
+        # Tarjetas de Indicadores KPI
         total_p_prog = len(df_p_filt)
-        total_p_ejec = int(df_p_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_p_filt.columns else 0
+        total_p_ejec = int((df_p_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_p_filt.columns else 0
         pct_p_avance = (total_p_ejec / total_p_prog * 100) if total_p_prog > 0 else 0.0
 
         m1, m2, m3 = st.columns(3)
         m1.metric("📋 Total Programados", f"{total_p_prog:,}")
-        m2.metric("✅ Total Inspeccionados", f"{total_p_ejec:,}")
+        m2.metric("✅ Total Inspeccionados (100%)", f"{total_p_ejec:,}")
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_p_avance:.1f}%")
         st.markdown("---")
+
+        # Gráfica de Tendencia Mensual (Doble Eje Y)
+        fig_p_monthly = plot_monthly_trend(df_p_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Plan General)")
+        if fig_p_monthly:
+            st.plotly_chart(fig_p_monthly, use_container_width=True)
 
         if not df_p_filt.empty:
             fig_p = px.bar(df_p_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TIPO", title="Avance Plan General por Unidad", barmode="group")
             st.plotly_chart(fig_p, use_container_width=True)
 
-        cols_show_p = [c for c in df_p_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        cols_show_p = [c for c in df_p_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_p = st.data_editor(df_p_filt[cols_show_p], num_rows="dynamic", key="ed_p")
         if st.button("Guardar Plan General"):
             st.session_state["df_inst_plan"] = edited_p
@@ -312,22 +382,27 @@ with tab_inst:
         if s_uv and "UNIDAD" in df_v_filt.columns:
             df_v_filt = df_v_filt[df_v_filt["UNIDAD"].isin(s_uv)]
 
-        # --- INDICADORES DINÁMICOS ---
+        # Tarjetas de Indicadores KPI
         total_v_prog = len(df_v_filt)
-        total_v_ejec = int(df_v_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_v_filt.columns else 0
+        total_v_ejec = int((df_v_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_v_filt.columns else 0
         pct_v_avance = (total_v_ejec / total_v_prog * 100) if total_v_prog > 0 else 0.0
 
         m1, m2, m3 = st.columns(3)
         m1.metric("🚰 Válvulas Programadas", f"{total_v_prog:,}")
-        m2.metric("✅ Válvulas Inspeccionadas", f"{total_v_ejec:,}")
+        m2.metric("✅ Válvulas Inspeccionadas (100%)", f"{total_v_ejec:,}")
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_v_avance:.1f}%")
         st.markdown("---")
+
+        # Gráfica de Tendencia Mensual (Doble Eje Y)
+        fig_v_monthly = plot_monthly_trend(df_v_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Válvulas VAAR)")
+        if fig_v_monthly:
+            st.plotly_chart(fig_v_monthly, use_container_width=True)
 
         if not df_v_filt.empty:
             fig_v = px.bar(df_v_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Válvulas VAAR por Unidad", barmode="group")
             st.plotly_chart(fig_v, use_container_width=True)
 
-        cols_show_v = [c for c in df_v_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        cols_show_v = [c for c in df_v_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_v = st.data_editor(df_v_filt[cols_show_v], num_rows="dynamic", key="ed_v")
         if st.button("Guardar Válvulas VAAR"):
             df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("VAAR", case=False, na=False)]
@@ -356,22 +431,27 @@ with tab_inst:
         if s_us and "UNIDAD" in df_s_filt.columns:
             df_s_filt = df_s_filt[df_s_filt["UNIDAD"].isin(s_us)]
 
-        # --- INDICADORES DINÁMICOS ---
+        # Tarjetas de Indicadores KPI
         total_s_prog = len(df_s_filt)
-        total_s_ejec = int(df_s_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_s_filt.columns else 0
+        total_s_ejec = int((df_s_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_s_filt.columns else 0
         pct_s_avance = (total_s_ejec / total_s_prog * 100) if total_s_prog > 0 else 0.0
 
         m1, m2, m3 = st.columns(3)
         m1.metric("📡 Sensores Programados", f"{total_s_prog:,}")
-        m2.metric("✅ Sensores Inspeccionados", f"{total_s_ejec:,}")
+        m2.metric("✅ Sensores Inspeccionados (100%)", f"{total_s_ejec:,}")
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_s_avance:.1f}%")
         st.markdown("---")
+
+        # Gráfica de Tendencia Mensual (Doble Eje Y)
+        fig_s_monthly = plot_monthly_trend(df_s_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Sensores de Vibración)")
+        if fig_s_monthly:
+            st.plotly_chart(fig_s_monthly, use_container_width=True)
 
         if not df_s_filt.empty:
             fig_s = px.bar(df_s_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Sensores de Vibración por Unidad", barmode="group")
             st.plotly_chart(fig_s, use_container_width=True)
 
-        cols_show_s = [c for c in df_s_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        cols_show_s = [c for c in df_s_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
         edited_s = st.data_editor(df_s_filt[cols_show_s], num_rows="dynamic", key="ed_s")
         if st.button("Guardar Sensores"):
             df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("SENSOR", case=False, na=False)]
@@ -425,7 +505,7 @@ with tab_acc:
                 st.plotly_chart(fig_acc_tipo, use_container_width=True)
 
     st.subheader("Bitácora y Detalle de Incidentes")
-    cols_to_show_acc = [c for c in df_acc_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    cols_to_show_acc = [c for c in df_acc_filtered.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
     edited_acc = st.data_editor(df_acc_filtered[cols_to_show_acc], num_rows="dynamic", key="editor_acc")
     if st.button("Guardar Registro de Accidentes"):
         st.session_state["df_acc"] = edited_acc
@@ -479,7 +559,7 @@ with tab_ops:
                 st.plotly_chart(fig_ops_obs, use_container_width=True)
 
     st.subheader("Matriz de Observaciones Generadas (OPS)")
-    cols_to_show_ops = [c for c in df_ops_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    cols_to_show_ops = [c for c in df_ops_filtered.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
     edited_ops = st.data_editor(df_ops_filtered[cols_to_show_ops], num_rows="dynamic", key="editor_ops")
     if st.button("Guardar Cambios OPS"):
         st.session_state["df_ops_gen"] = edited_ops
