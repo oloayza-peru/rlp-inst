@@ -28,10 +28,13 @@ def load_default_data():
 
     try:
         df_inst_plan = pd.read_excel("KPI PLAN INSTRUMENTACION.xlsx", sheet_name="Plan")
-        df_inst_vaar = pd.read_excel("KPI PLAN INSTRUMENTACION.xlsx", sheet_name="Válvulas VAAR- Sensores")
-        df_inst = pd.concat([df_inst_plan, df_inst_vaar], ignore_index=True)
     except Exception:
-        df_inst = pd.DataFrame(columns=["PLAN", "TIPO", "MES", "UNIDAD", "TAG", "AVANCE DE CAMPO", "COMENTARIO"])
+        df_inst_plan = pd.DataFrame(columns=["PLAN", "TIPO", "MES", "UNIDAD", "TAG", "AVANCE DE CAMPO", "COMENTARIO"])
+
+    try:
+        df_inst_vaar = pd.read_excel("KPI PLAN INSTRUMENTACION.xlsx", sheet_name="Válvulas VAAR- Sensores")
+    except Exception:
+        df_inst_vaar = pd.DataFrame(columns=["PLAN", "TIPO", "MES", "UNIDAD", "TAG", "AVANCE DE CAMPO", "COMENTARIO"])
 
     try:
         df_acc = pd.read_excel("KPI ACCIDENTES.xlsx", sheet_name="SEG_ACCIDENTES")
@@ -45,12 +48,13 @@ def load_default_data():
         df_ops_gen = pd.DataFrame(columns=["N°", "FECHA", "OPSID", "GRAVEDAD", "ÁREA", "UNIDAD", "EMPRESA", "ARESP", "DESCRIPCION DE OBSERVACIÓN", "OBSERVADOR"])
         df_ops_cuota = pd.DataFrame(columns=["MES", "CUOTA"])
 
-    return df_sst, df_inst, df_acc, df_ops_gen, df_ops_cuota
+    return df_sst, df_inst_plan, df_inst_vaar, df_acc, df_ops_gen, df_ops_cuota
 
 if "df_sst" not in st.session_state:
-    df_sst, df_inst, df_acc, df_ops_gen, df_ops_cuota = load_default_data()
+    df_sst, df_inst_plan, df_inst_vaar, df_acc, df_ops_gen, df_ops_cuota = load_default_data()
     st.session_state["df_sst"] = df_sst
-    st.session_state["df_inst"] = df_inst
+    st.session_state["df_inst_plan"] = df_inst_plan
+    st.session_state["df_inst_vaar"] = df_inst_vaar
     st.session_state["df_acc"] = df_acc
     st.session_state["df_ops_gen"] = df_ops_gen
     st.session_state["df_ops_cuota"] = df_ops_cuota
@@ -84,6 +88,14 @@ def extract_year_month(df, date_col):
     
     return df_copy, years, months
 
+def filter_df(df_in, years, months):
+    df_out = df_in.copy()
+    if years and "Year_Temp" in df_out.columns:
+        df_out = df_out[df_out["Year_Temp"].isin(years)]
+    if months and "Month_Temp" in df_out.columns:
+        df_out = df_out[df_out["Month_Temp"].isin(months)]
+    return df_out
+
 # ---------------------------------------------------------
 # PESTAÑAS PRINCIPALES
 # ---------------------------------------------------------
@@ -101,8 +113,10 @@ tab_resumen, tab_sst, tab_inst, tab_acc, tab_ops = st.tabs([
 with tab_resumen:
     st.header("KPIs Principales del Proyecto")
     
+    df_inst_full = pd.concat([st.session_state["df_inst_plan"], st.session_state["df_inst_vaar"]], ignore_index=True)
+    
     df_sst_proc, y_sst, m_sst = extract_year_month(st.session_state["df_sst"], "Mes")
-    df_inst_proc, y_inst, m_inst = extract_year_month(st.session_state["df_inst"], "MES")
+    df_inst_proc, y_inst, m_inst = extract_year_month(df_inst_full, "MES")
     df_acc_proc, y_acc, m_acc = extract_year_month(st.session_state["df_acc"], "FECHA")
     df_ops_proc, y_ops, m_ops = extract_year_month(st.session_state["df_ops_gen"], "FECHA")
     
@@ -114,14 +128,6 @@ with tab_resumen:
         sel_years_res = st.multiselect("📅 Filtrar por Año (Resumen General):", options=all_years, default=all_years, key="filter_res_year")
     with col_m:
         sel_months_res = st.multiselect("🗓️ Filtrar por Mes (Resumen General):", options=all_months, default=all_months, key="filter_res_month")
-        
-    def filter_df(df_in, years, months):
-        df_out = df_in.copy()
-        if years and "Year_Temp" in df_out.columns:
-            df_out = df_out[df_out["Year_Temp"].isin(years)]
-        if months and "Month_Temp" in df_out.columns:
-            df_out = df_out[df_out["Month_Temp"].isin(months)]
-        return df_out
 
     df_sst_r = filter_df(df_sst_proc, sel_years_res, sel_months_res)
     df_inst_r = filter_df(df_inst_proc, sel_years_res, sel_months_res)
@@ -224,58 +230,159 @@ with tab_sst:
     )
 
 # =========================================================
-# PESTAÑA 3: PLAN INSTRUMENTACIÓN
+# PESTAÑA 3: PLAN INSTRUMENTACIÓN (SEGREGADO CON INDICADORES EN PARTE SUPERIOR)
 # =========================================================
 with tab_inst:
-    st.header("Plan de Inspección de Instrumentación y Válvulas")
+    st.header("Plan de Inspección de Instrumentación, Válvulas y Sensores")
     
     uploaded_inst = st.file_uploader("Reemplazar/Actualizar Matriz Instrumentación (Excel)", type=["xlsx"], key="u_inst")
     if uploaded_inst:
         xls = pd.ExcelFile(uploaded_inst)
-        dfs = []
-        for sheet in xls.sheet_names:
-            if sheet != "Hoja1":
-                dfs.append(pd.read_excel(uploaded_inst, sheet_name=sheet))
-        if dfs:
-            st.session_state["df_inst"] = pd.concat(dfs, ignore_index=True)
-            st.success("Matriz de Instrumentación cargada con éxito.")
+        if "Plan" in xls.sheet_names:
+            st.session_state["df_inst_plan"] = pd.read_excel(uploaded_inst, sheet_name="Plan")
+        if "Válvulas VAAR- Sensores" in xls.sheet_names:
+            st.session_state["df_inst_vaar"] = pd.read_excel(uploaded_inst, sheet_name="Válvulas VAAR- Sensores")
+        st.success("Matriz de Instrumentación cargada con éxito.")
 
-    df_inst_proc, years_inst, months_inst = extract_year_month(st.session_state["df_inst"], "MES")
-    
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    with col_f1:
-        sel_years_inst = st.multiselect("📅 Filtrar por Año:", options=years_inst, default=years_inst, key="filter_inst_year")
-    with col_f2:
-        sel_months_inst = st.multiselect("🗓️ Filtrar por Mes:", options=months_inst, default=months_inst, key="filter_inst_month")
-    with col_f3:
-        tipos = st.multiselect("Filtrar por Tipo:", options=df_inst_proc["TIPO"].unique() if "TIPO" in df_inst_proc.columns else [], default=df_inst_proc["TIPO"].unique() if "TIPO" in df_inst_proc.columns else [], key="filter_inst_tipo")
-    with col_f4:
-        unidades = st.multiselect("Filtrar por Unidad:", options=df_inst_proc["UNIDAD"].unique() if "UNIDAD" in df_inst_proc.columns else [], default=df_inst_proc["UNIDAD"].unique() if "UNIDAD" in df_inst_proc.columns else [], key="filter_inst_unidad")
+    # Sub-pestañas para segregación por Plan
+    subtab_plan, subtab_vaar, subtab_sensores = st.tabs([
+        "📋 Plan General",
+        "🚰 Válvulas VAAR",
+        "📡 Sensores de Vibración"
+    ])
+
+    # --- SUBTAB 1: PLAN GENERAL ---
+    with subtab_plan:
+        st.subheader("Plan General de Instrumentación")
+        df_p_proc, years_p, months_p = extract_year_month(st.session_state["df_inst_plan"], "MES")
         
-    df_filtered_inst = filter_df(df_inst_proc, sel_years_inst, sel_months_inst)
-    if tipos and "TIPO" in df_filtered_inst.columns:
-        df_filtered_inst = df_filtered_inst[df_filtered_inst["TIPO"].isin(tipos)]
-    if unidades and "UNIDAD" in df_filtered_inst.columns:
-        df_filtered_inst = df_filtered_inst[df_filtered_inst["UNIDAD"].isin(unidades)]
+        # Filtros
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            s_yp = st.multiselect("📅 Año:", options=years_p, default=years_p, key="f_p_y")
+        with c2:
+            s_mp = st.multiselect("🗓️ Mes:", options=months_p, default=months_p, key="f_p_m")
+        with c3:
+            s_up = st.multiselect("Unidad:", options=df_p_proc["UNIDAD"].unique() if "UNIDAD" in df_p_proc.columns else [], key="f_p_u")
+
+        df_p_filt = filter_df(df_p_proc, s_yp, s_mp)
+        if s_up and "UNIDAD" in df_p_filt.columns:
+            df_p_filt = df_p_filt[df_p_filt["UNIDAD"].isin(s_up)]
+
+        # --- INDICADORES DINÁMICOS ---
+        total_p_prog = len(df_p_filt)
+        total_p_ejec = int(df_p_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_p_filt.columns else 0
+        pct_p_avance = (total_p_ejec / total_p_prog * 100) if total_p_prog > 0 else 0.0
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("📋 Total Programados", f"{total_p_prog:,}")
+        m2.metric("✅ Total Inspeccionados", f"{total_p_ejec:,}")
+        m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_p_avance:.1f}%")
+        st.markdown("---")
+
+        if not df_p_filt.empty:
+            fig_p = px.bar(df_p_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TIPO", title="Avance Plan General por Unidad", barmode="group")
+            st.plotly_chart(fig_p, use_container_width=True)
+
+        cols_show_p = [c for c in df_p_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        edited_p = st.data_editor(df_p_filt[cols_show_p], num_rows="dynamic", key="ed_p")
+        if st.button("Guardar Plan General"):
+            st.session_state["df_inst_plan"] = edited_p
+            st.success("Plan General guardado.")
+
+    # --- SUBTAB 2: VÁLVULAS VAAR ---
+    with subtab_vaar:
+        st.subheader("Plan de Válvulas VAAR")
+        df_vaar_base = st.session_state["df_inst_vaar"]
+        if not df_vaar_base.empty and "TIPO" in df_vaar_base.columns:
+            df_vaar_base = df_vaar_base[df_vaar_base["TIPO"].str.contains("VAAR", case=False, na=False)]
+
+        df_v_proc, years_v, months_v = extract_year_month(df_vaar_base, "MES")
         
-    if not df_filtered_inst.empty:
-        fig_inst_bar = px.bar(
-            df_filtered_inst, x="UNIDAD", y="AVANCE DE CAMPO", color="TIPO",
-            title="Avance de Campo por Unidad Operativa e Instrumento",
-            barmode="group"
-        )
-        st.plotly_chart(fig_inst_bar, use_container_width=True)
+        # Filtros
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            s_yv = st.multiselect("📅 Año:", options=years_v, default=years_v, key="f_v_y")
+        with c2:
+            s_mv = st.multiselect("🗓️ Mes:", options=months_v, default=months_v, key="f_v_m")
+        with c3:
+            s_uv = st.multiselect("Unidad:", options=df_v_proc["UNIDAD"].unique() if "UNIDAD" in df_v_proc.columns else [], key="f_v_u")
 
-    st.subheader("Matriz de Inspección de Campo")
-    cols_to_show_inst = [c for c in df_filtered_inst.columns if c not in ["Year_Temp", "Month_Temp"]]
-    edited_inst = st.data_editor(df_filtered_inst[cols_to_show_inst], num_rows="dynamic", key="editor_inst")
-    if st.button("Guardar Cambios Instrumentación"):
-        st.session_state["df_inst"] = edited_inst
-        st.success("Matriz de Instrumentación guardada en sesión.")
+        df_v_filt = filter_df(df_v_proc, s_yv, s_mv)
+        if s_uv and "UNIDAD" in df_v_filt.columns:
+            df_v_filt = df_v_filt[df_v_filt["UNIDAD"].isin(s_uv)]
 
+        # --- INDICADORES DINÁMICOS ---
+        total_v_prog = len(df_v_filt)
+        total_v_ejec = int(df_v_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_v_filt.columns else 0
+        pct_v_avance = (total_v_ejec / total_v_prog * 100) if total_v_prog > 0 else 0.0
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("🚰 Válvulas Programadas", f"{total_v_prog:,}")
+        m2.metric("✅ Válvulas Inspeccionadas", f"{total_v_ejec:,}")
+        m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_v_avance:.1f}%")
+        st.markdown("---")
+
+        if not df_v_filt.empty:
+            fig_v = px.bar(df_v_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Válvulas VAAR por Unidad", barmode="group")
+            st.plotly_chart(fig_v, use_container_width=True)
+
+        cols_show_v = [c for c in df_v_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        edited_v = st.data_editor(df_v_filt[cols_show_v], num_rows="dynamic", key="ed_v")
+        if st.button("Guardar Válvulas VAAR"):
+            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("VAAR", case=False, na=False)]
+            st.session_state["df_inst_vaar"] = pd.concat([df_other, edited_v], ignore_index=True)
+            st.success("Plan Válvulas VAAR guardado.")
+
+    # --- SUBTAB 3: SENSORES DE VIBRACIÓN ---
+    with subtab_sensores:
+        st.subheader("Plan de Sensores de Vibración")
+        df_sens_base = st.session_state["df_inst_vaar"]
+        if not df_sens_base.empty and "TIPO" in df_sens_base.columns:
+            df_sens_base = df_sens_base[df_sens_base["TIPO"].str.contains("SENSOR", case=False, na=False)]
+
+        df_s_proc, years_s, months_s = extract_year_month(df_sens_base, "MES")
+        
+        # Filtros
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            s_ys = st.multiselect("📅 Año:", options=years_s, default=years_s, key="f_s_y")
+        with c2:
+            s_ms = st.multiselect("🗓️ Mes:", options=months_s, default=months_s, key="f_s_m")
+        with c3:
+            s_us = st.multiselect("Unidad:", options=df_s_proc["UNIDAD"].unique() if "UNIDAD" in df_s_proc.columns else [], key="f_s_u")
+
+        df_s_filt = filter_df(df_s_proc, s_ys, s_ms)
+        if s_us and "UNIDAD" in df_s_filt.columns:
+            df_s_filt = df_s_filt[df_s_filt["UNIDAD"].isin(s_us)]
+
+        # --- INDICADORES DINÁMICOS ---
+        total_s_prog = len(df_s_filt)
+        total_s_ejec = int(df_s_filt["AVANCE DE CAMPO"].sum()) if "AVANCE DE CAMPO" in df_s_filt.columns else 0
+        pct_s_avance = (total_s_ejec / total_s_prog * 100) if total_s_prog > 0 else 0.0
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("📡 Sensores Programados", f"{total_s_prog:,}")
+        m2.metric("✅ Sensores Inspeccionados", f"{total_s_ejec:,}")
+        m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_s_avance:.1f}%")
+        st.markdown("---")
+
+        if not df_s_filt.empty:
+            fig_s = px.bar(df_s_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Sensores de Vibración por Unidad", barmode="group")
+            st.plotly_chart(fig_s, use_container_width=True)
+
+        cols_show_s = [c for c in df_s_filt.columns if c not in ["Year_Temp", "Month_Temp"]]
+        edited_s = st.data_editor(df_s_filt[cols_show_s], num_rows="dynamic", key="ed_s")
+        if st.button("Guardar Sensores"):
+            df_other = st.session_state["df_inst_vaar"][~st.session_state["df_inst_vaar"]["TIPO"].str.contains("SENSOR", case=False, na=False)]
+            st.session_state["df_inst_vaar"] = pd.concat([df_other, edited_s], ignore_index=True)
+            st.success("Plan Sensores guardado.")
+
+    st.markdown("---")
+    df_inst_download = pd.concat([st.session_state["df_inst_plan"], st.session_state["df_inst_vaar"]], ignore_index=True)
     st.download_button(
-        label="📥 Descargar Matriz Instrumentación Actualizada",
-        data=to_excel_download(st.session_state["df_inst"], "Plan"),
+        label="📥 Descargar Matriz Consolidada de Instrumentación Actualizada",
+        data=to_excel_download(df_inst_download, "Plan"),
         file_name="KPI_PLAN_INSTRUMENTACION_ACTUALIZADO.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
