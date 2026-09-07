@@ -118,17 +118,21 @@ def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Progr
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
+    # Traza de Barras (Programados) con etiquetas de datos
     fig.add_trace(
         go.Bar(
             x=df_grouped["Mes_Periodo"],
             y=df_grouped["Programados"],
             name="Programados",
             marker_color="#1f77b4",
-            opacity=0.7
+            opacity=0.7,
+            text=df_grouped["Programados"],
+            textposition="outside"
         ),
         secondary_y=False
     )
 
+    # Traza de Líneas (Inspeccionados) con etiquetas de datos superiores
     fig.add_trace(
         go.Scatter(
             x=df_grouped["Mes_Periodo"],
@@ -137,6 +141,7 @@ def plot_monthly_trend(df_input, date_col="MES", title="Tendencia Mensual: Progr
             mode="lines+markers+text",
             text=df_grouped["Inspeccionados"],
             textposition="top center",
+            textfont=dict(size=12, color="black"),
             line=dict(color="#2ca02c", width=3),
             marker=dict(size=8)
         ),
@@ -216,8 +221,10 @@ with tab_resumen:
                 df_inst_r, x="UNIDAD", y="AVANCE DE CAMPO", color="TIPO",
                 histfunc="avg", barmode="group",
                 title="Promedio de Avance por Unidad y Tipo de Equipo",
-                labels={"AVANCE DE CAMPO": "Avance Promedio (0-1)", "UNIDAD": "Unidad Operativa"}
+                labels={"AVANCE DE CAMPO": "Avance Promedio (0-1)", "UNIDAD": "Unidad Operativa"},
+                text_auto='.2f'
             )
+            fig_inst_summary.update_traces(textposition='outside')
             st.plotly_chart(fig_inst_summary, use_container_width=True)
     
     with c2:
@@ -256,8 +263,10 @@ with tab_sst:
             fig_sst_bar = px.bar(
                 df_sst_filtered, x="Tipo", y="% Cumplimiento", color="Tipo",
                 title="Cumplimiento Promedio por Tipo de Actividad SST",
-                labels={"% Cumplimiento": "Cumplimiento (0.0 a 1.0)"}
+                labels={"% Cumplimiento": "Cumplimiento (0.0 a 1.0)"},
+                text_auto='.2f'
             )
+            fig_sst_bar.update_traces(textposition='outside')
             st.plotly_chart(fig_sst_bar, use_container_width=True)
         with c2:
             avg_val = df_sst_filtered["% Cumplimiento"].mean() * 100 if "% Cumplimiento" in df_sst_filtered.columns else 0
@@ -321,7 +330,6 @@ with tab_inst:
         with c2:
             s_mp = st.multiselect("🗓️ Mes:", options=months_p, default=months_p, key="f_p_m")
         with c3:
-            # Filtrar unidades eliminando 'MAX U 63' de la lista
             units_plan = df_p_proc["UNIDAD"].dropna().astype(str).unique() if "UNIDAD" in df_p_proc.columns else []
             units_plan_clean = [u for u in units_plan if u.strip().upper() != "MAX U 63"]
             s_up = st.multiselect("Unidad:", options=units_plan_clean, key="f_p_u")
@@ -341,17 +349,16 @@ with tab_inst:
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_p_avance:.1f}%")
         st.markdown("---")
 
-        # Gráfica de Tendencia Mensual (Doble Eje Y)
+        # Gráfica de Tendencia Mensual (Doble Eje Y) con Etiquetas de Datos
         fig_p_monthly = plot_monthly_trend(df_p_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Plan General)")
         if fig_p_monthly:
             st.plotly_chart(fig_p_monthly, use_container_width=True)
 
-        # Gráfica de Avance por Unidad (Rango de Eje X de 0 a 70 y Título Actualizado)
+        # Gráfica de Avance por Unidad con Etiquetas de Datos visibles
         if not df_p_filt.empty and "UNIDAD" in df_p_filt.columns:
             df_p_chart = df_p_filt.copy()
             df_p_chart["UNIDAD_NUM"] = pd.to_numeric(df_p_chart["UNIDAD"], errors="coerce")
             
-            # Filtrar registros dentro del rango numérico 0 a 70
             df_p_chart = df_p_chart[(df_p_chart["UNIDAD_NUM"] >= 0) & (df_p_chart["UNIDAD_NUM"] <= 70)]
             
             if not df_p_chart.empty:
@@ -362,8 +369,10 @@ with tab_inst:
                     color="TIPO", 
                     title="Avance Plan General por Unidad", 
                     barmode="group",
-                    labels={"UNIDAD_NUM": "UNIDAD"}
+                    labels={"UNIDAD_NUM": "UNIDAD"},
+                    text_auto=True
                 )
+                fig_p.update_traces(textposition="outside")
                 fig_p.update_xaxes(range=[0, 70], dtick=10)
                 st.plotly_chart(fig_p, use_container_width=True)
 
@@ -382,7 +391,6 @@ with tab_inst:
 
         df_v_proc, years_v, months_v = extract_year_month(df_vaar_base, "MES")
         
-        # Filtros
         c1, c2, c3 = st.columns(3)
         with c1:
             s_yv = st.multiselect("📅 Año:", options=years_v, default=years_v, key="f_v_y")
@@ -395,7 +403,6 @@ with tab_inst:
         if s_uv and "UNIDAD" in df_v_filt.columns:
             df_v_filt = df_v_filt[df_v_filt["UNIDAD"].isin(s_uv)]
 
-        # Tarjetas de Indicadores KPI
         total_v_prog = len(df_v_filt)
         total_v_ejec = int((df_v_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_v_filt.columns else 0
         pct_v_avance = (total_v_ejec / total_v_prog * 100) if total_v_prog > 0 else 0.0
@@ -406,13 +413,13 @@ with tab_inst:
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_v_avance:.1f}%")
         st.markdown("---")
 
-        # Gráfica de Tendencia Mensual (Doble Eje Y)
         fig_v_monthly = plot_monthly_trend(df_v_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Válvulas VAAR)")
         if fig_v_monthly:
             st.plotly_chart(fig_v_monthly, use_container_width=True)
 
         if not df_v_filt.empty:
-            fig_v = px.bar(df_v_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Válvulas VAAR por Unidad", barmode="group")
+            fig_v = px.bar(df_v_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Válvulas VAAR por Unidad", barmode="group", text_auto=True)
+            fig_v.update_traces(textposition="outside")
             st.plotly_chart(fig_v, use_container_width=True)
 
         cols_show_v = [c for c in df_v_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
@@ -431,7 +438,6 @@ with tab_inst:
 
         df_s_proc, years_s, months_s = extract_year_month(df_sens_base, "MES")
         
-        # Filtros
         c1, c2, c3 = st.columns(3)
         with c1:
             s_ys = st.multiselect("📅 Año:", options=years_s, default=years_s, key="f_s_y")
@@ -444,7 +450,6 @@ with tab_inst:
         if s_us and "UNIDAD" in df_s_filt.columns:
             df_s_filt = df_s_filt[df_s_filt["UNIDAD"].isin(s_us)]
 
-        # Tarjetas de Indicadores KPI
         total_s_prog = len(df_s_filt)
         total_s_ejec = int((df_s_filt["AVANCE DE CAMPO"] == 1).sum()) if "AVANCE DE CAMPO" in df_s_filt.columns else 0
         pct_s_avance = (total_s_ejec / total_s_prog * 100) if total_s_prog > 0 else 0.0
@@ -455,13 +460,13 @@ with tab_inst:
         m3.metric("📊 % Avance (Ejecutado vs Programado)", f"{pct_s_avance:.1f}%")
         st.markdown("---")
 
-        # Gráfica de Tendencia Mensual (Doble Eje Y)
         fig_s_monthly = plot_monthly_trend(df_s_filt, title="Indicador Mensual: Programados vs. Inspeccionados al 100% (Sensores de Vibración)")
         if fig_s_monthly:
             st.plotly_chart(fig_s_monthly, use_container_width=True)
 
         if not df_s_filt.empty:
-            fig_s = px.bar(df_s_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Sensores de Vibración por Unidad", barmode="group")
+            fig_s = px.bar(df_s_filt, x="UNIDAD", y="AVANCE DE CAMPO", color="TAG", title="Avance Sensores de Vibración por Unidad", barmode="group", text_auto=True)
+            fig_s.update_traces(textposition="outside")
             st.plotly_chart(fig_s, use_container_width=True)
 
         cols_show_s = [c for c in df_s_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
@@ -513,8 +518,9 @@ with tab_acc:
         with c2:
             if "TIPO" in df_acc_filtered.columns and "UBICACIÓN" in df_acc_filtered.columns:
                 fig_acc_tipo = px.bar(
-                    df_acc_filtered, x="TIPO", color="UBICACIÓN", title="Eventos Clasificados por Tipo"
+                    df_acc_filtered, x="TIPO", color="UBICACIÓN", title="Eventos Clasificados por Tipo", text_auto=True
                 )
+                fig_acc_tipo.update_traces(textposition="outside")
                 st.plotly_chart(fig_acc_tipo, use_container_width=True)
 
     st.subheader("Bitácora y Detalle de Incidentes")
@@ -560,15 +566,16 @@ with tab_ops:
                 fig_ops_area = px.bar(
                     df_ops_filtered, x="ÁREA", color="GRAVEDAD",
                     title="OPS Generadas por Área Operativa y Gravedad",
-                    barmode="stack"
+                    barmode="stack", text_auto=True
                 )
                 st.plotly_chart(fig_ops_area, use_container_width=True)
         with c2:
             if "OBSERVADOR" in df_ops_filtered.columns:
                 fig_ops_obs = px.bar(
                     df_ops_filtered, x="OBSERVADOR", title="Reporte de OPS por Inspector / Observador",
-                    color_discrete_sequence=["#2ca02c"]
+                    color_discrete_sequence=["#2ca02c"], text_auto=True
                 )
+                fig_ops_obs.update_traces(textposition="outside")
                 st.plotly_chart(fig_ops_obs, use_container_width=True)
 
     st.subheader("Matriz de Observaciones Generadas (OPS)")
