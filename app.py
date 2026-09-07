@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import io
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION
+# CONFIGURACIÓN DE PÁGINA
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Dashboard Gerencial - Inspecciones Hidrocarburos",
@@ -17,7 +17,7 @@ st.title("🛢️ Sistema Integrado de Control de Inspecciones & SST")
 st.caption("Plataforma Gerencial de Monitoreo de KPIs de Inspección, Seguridad y Operaciones")
 
 # ---------------------------------------------------------
-# DATA LOADING & SESSION STATE INITIALIZATION
+# CARGA DE DATOS E INICIALIZACIÓN DE ESTADO (SESSION STATE)
 # ---------------------------------------------------------
 @st.cache_data
 def load_default_data():
@@ -57,35 +57,35 @@ if "df_sst" not in st.session_state:
 
 def to_excel_download(df, sheet_name="Datos"):
     output = io.BytesIO()
+    cols_to_drop = [c for c in ["Year_Temp", "Month_Temp"] if c in df.columns]
+    df_clean = df.drop(columns=cols_to_drop)
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        df_clean.to_excel(writer, index=False, sheet_name=sheet_name)
     return output.getvalue()
 
-# Month names in Spanish mapping
-MONTH_NAMES = {
-    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-}
-
-def extract_years_and_months(df, date_col):
-    if df.empty or date_col not in df.columns:
-        return [], []
-    dt_series = pd.to_datetime(df[date_col], errors='coerce').dropna()
-    years = sorted(list(dt_series.dt.year.unique().astype(int)))
-    months = sorted(list(dt_series.dt.month.unique().astype(int)))
-    return years, months
-
-def filter_by_year_month(df, date_col, selected_years, selected_months):
-    if df.empty or date_col not in df.columns:
-        return df
-    dt_series = pd.to_datetime(df[date_col], errors='coerce')
-    cond_year = dt_series.dt.year.isin(selected_years) if selected_years else True
-    cond_month = dt_series.dt.month.isin(selected_months) if selected_months else True
-    return df[cond_year & cond_month]
+# Helper para extraer Años y Meses formateados
+def extract_year_month(df, date_col):
+    df_copy = df.copy()
+    if df_copy.empty or date_col not in df_copy.columns:
+        df_copy["Year_Temp"] = None
+        df_copy["Month_Temp"] = None
+        return df_copy, [], []
+    
+    dates = pd.to_datetime(df_copy[date_col], errors='coerce')
+    df_copy["Year_Temp"] = dates.dt.year.astype("Int64")
+    df_copy["Month_Temp"] = dates.dt.month_name()
+    
+    years = sorted([int(y) for y in df_copy["Year_Temp"].dropna().unique()])
+    
+    month_order = ["January", "February", "March", "April", "May", "June", 
+                   "July", "August", "September", "October", "November", "December"]
+    found_months = df_copy["Month_Temp"].dropna().unique()
+    months = [m for m in month_order if m in found_months]
+    
+    return df_copy, years, months
 
 # ---------------------------------------------------------
-# MAIN TABS
+# PESTAÑAS PRINCIPALES
 # ---------------------------------------------------------
 tab_resumen, tab_sst, tab_inst, tab_acc, tab_ops = st.tabs([
     "📊 Resumen Ejecutivo",
@@ -96,41 +96,37 @@ tab_resumen, tab_sst, tab_inst, tab_acc, tab_ops = st.tabs([
 ])
 
 # =========================================================
-# TAB: RESUMEN EJECUTIVO
+# PESTAÑA 1: RESUMEN EJECUTIVO
 # =========================================================
 with tab_resumen:
     st.header("KPIs Principales del Proyecto")
     
-    # Global year and month extraction
-    y_sst, m_sst = extract_years_and_months(st.session_state["df_sst"], "Mes")
-    y_inst, m_inst = extract_years_and_months(st.session_state["df_inst"], "MES")
-    y_acc, m_acc = extract_years_and_months(st.session_state["df_acc"], "FECHA")
-    y_ops, m_ops = extract_years_and_months(st.session_state["df_ops_gen"], "FECHA")
+    df_sst_proc, y_sst, m_sst = extract_year_month(st.session_state["df_sst"], "Mes")
+    df_inst_proc, y_inst, m_inst = extract_year_month(st.session_state["df_inst"], "MES")
+    df_acc_proc, y_acc, m_acc = extract_year_month(st.session_state["df_acc"], "FECHA")
+    df_ops_proc, y_ops, m_ops = extract_year_month(st.session_state["df_ops_gen"], "FECHA")
     
     all_years = sorted(list(set(y_sst + y_inst + y_acc + y_ops)))
-    all_months = sorted(list(set(m_sst + m_inst + m_acc + m_ops)))
+    all_months = list(dict.fromkeys(m_sst + m_inst + m_acc + m_ops))
     
-    col_f_y, col_f_m = st.columns(2)
-    with col_f_y:
-        selected_years_res = st.multiselect(
-            "📅 Filtrar por Año (Resumen):",
-            options=all_years,
-            default=all_years,
-            key="filter_res_year"
-        )
-    with col_f_m:
-        selected_months_res = st.multiselect(
-            "🗓️ Filtrar por Mes (Resumen):",
-            options=all_months,
-            default=all_months,
-            format_func=lambda x: f"{x:02d} - {MONTH_NAMES.get(x, '')}",
-            key="filter_res_month"
-        )
-    
-    df_sst_r = filter_by_year_month(st.session_state["df_sst"], "Mes", selected_years_res, selected_months_res)
-    df_inst_r = filter_by_year_month(st.session_state["df_inst"], "MES", selected_years_res, selected_months_res)
-    df_acc_r = filter_by_year_month(st.session_state["df_acc"], "FECHA", selected_years_res, selected_months_res)
-    df_ops_r = filter_by_year_month(st.session_state["df_ops_gen"], "FECHA", selected_years_res, selected_months_res)
+    col_y, col_m = st.columns(2)
+    with col_y:
+        sel_years_res = st.multiselect("📅 Filtrar por Año (Resumen General):", options=all_years, default=all_years, key="filter_res_year")
+    with col_m:
+        sel_months_res = st.multiselect("🗓️ Filtrar por Mes (Resumen General):", options=all_months, default=all_months, key="filter_res_month")
+        
+    def filter_df(df_in, years, months):
+        df_out = df_in.copy()
+        if years and "Year_Temp" in df_out.columns:
+            df_out = df_out[df_out["Year_Temp"].isin(years)]
+        if months and "Month_Temp" in df_out.columns:
+            df_out = df_out[df_out["Month_Temp"].isin(months)]
+        return df_out
+
+    df_sst_r = filter_df(df_sst_proc, sel_years_res, sel_months_res)
+    df_inst_r = filter_df(df_inst_proc, sel_years_res, sel_months_res)
+    df_acc_r = filter_df(df_acc_proc, sel_years_res, sel_months_res)
+    df_ops_r = filter_df(df_ops_proc, sel_years_res, sel_months_res)
 
     col1, col2, col3, col4 = st.columns(4)
     avg_sst = (df_sst_r["% Cumplimiento"].mean() * 100) if not df_sst_r.empty and "% Cumplimiento" in df_sst_r.columns else 0
@@ -169,7 +165,7 @@ with tab_resumen:
             st.plotly_chart(fig_ops_pie, use_container_width=True)
 
 # =========================================================
-# TAB: PLAN ANUAL SST
+# PESTAÑA 2: PLAN ANUAL SST
 # =========================================================
 with tab_sst:
     st.header("Plan Anual de Seguridad y Salud en el Trabajo (SST)")
@@ -179,22 +175,15 @@ with tab_sst:
         st.session_state["df_sst"] = pd.read_excel(uploaded_sst)
         st.success("Matriz SST actualizada correctamente.")
         
-    df_sst = st.session_state["df_sst"]
-    years_sst, months_sst = extract_years_and_months(df_sst, "Mes")
+    df_sst_proc, years_sst, months_sst = extract_year_month(st.session_state["df_sst"], "Mes")
     
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        sel_y_sst = st.multiselect("📅 Filtrar por Año (SST):", options=years_sst, default=years_sst, key="filter_sst_year")
+        sel_years_sst = st.multiselect("📅 Filtrar por Año (SST):", options=years_sst, default=years_sst, key="filter_sst_year")
     with col_f2:
-        sel_m_sst = st.multiselect(
-            "🗓️ Filtrar por Mes (SST):",
-            options=months_sst,
-            default=months_sst,
-            format_func=lambda x: f"{x:02d} - {MONTH_NAMES.get(x, '')}",
-            key="filter_sst_month"
-        )
+        sel_months_sst = st.multiselect("🗓️ Filtrar por Mes (SST):", options=months_sst, default=months_sst, key="filter_sst_month")
     
-    df_sst_filtered = filter_by_year_month(df_sst, "Mes", sel_y_sst, sel_m_sst)
+    df_sst_filtered = filter_df(df_sst_proc, sel_years_sst, sel_months_sst)
 
     if not df_sst_filtered.empty:
         c1, c2 = st.columns([2, 1])
@@ -221,7 +210,8 @@ with tab_sst:
             st.plotly_chart(fig_gauge, use_container_width=True)
             
     st.subheader("Edición y Gestión de Registros SST")
-    edited_sst = st.data_editor(df_sst_filtered, num_rows="dynamic", key="editor_sst")
+    cols_to_show = [c for c in df_sst_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    edited_sst = st.data_editor(df_sst_filtered[cols_to_show], num_rows="dynamic", key="editor_sst")
     if st.button("Guardar Cambios SST"):
         st.session_state["df_sst"] = edited_sst
         st.success("Cambios guardados en el sistema.")
@@ -234,7 +224,7 @@ with tab_sst:
     )
 
 # =========================================================
-# TAB: PLAN INSTRUMENTACIÓN
+# PESTAÑA 3: PLAN INSTRUMENTACIÓN
 # =========================================================
 with tab_inst:
     st.header("Plan de Inspección de Instrumentación y Válvulas")
@@ -250,26 +240,19 @@ with tab_inst:
             st.session_state["df_inst"] = pd.concat(dfs, ignore_index=True)
             st.success("Matriz de Instrumentación cargada con éxito.")
 
-    df_inst = st.session_state["df_inst"]
-    years_inst, months_inst = extract_years_and_months(df_inst, "MES")
+    df_inst_proc, years_inst, months_inst = extract_year_month(st.session_state["df_inst"], "MES")
     
     col_f1, col_f2, col_f3, col_f4 = st.columns(4)
     with col_f1:
-        sel_y_inst = st.multiselect("📅 Filtrar por Año:", options=years_inst, default=years_inst, key="filter_inst_year")
+        sel_years_inst = st.multiselect("📅 Filtrar por Año:", options=years_inst, default=years_inst, key="filter_inst_year")
     with col_f2:
-        sel_m_inst = st.multiselect(
-            "🗓️ Filtrar por Mes:",
-            options=months_inst,
-            default=months_inst,
-            format_func=lambda x: f"{x:02d} - {MONTH_NAMES.get(x, '')}",
-            key="filter_inst_month"
-        )
+        sel_months_inst = st.multiselect("🗓️ Filtrar por Mes:", options=months_inst, default=months_inst, key="filter_inst_month")
     with col_f3:
-        tipos = st.multiselect("Filtrar por Tipo:", options=df_inst["TIPO"].unique() if "TIPO" in df_inst.columns else [], default=df_inst["TIPO"].unique() if "TIPO" in df_inst.columns else [], key="filter_inst_tipo")
+        tipos = st.multiselect("Filtrar por Tipo:", options=df_inst_proc["TIPO"].unique() if "TIPO" in df_inst_proc.columns else [], default=df_inst_proc["TIPO"].unique() if "TIPO" in df_inst_proc.columns else [], key="filter_inst_tipo")
     with col_f4:
-        unidades = st.multiselect("Filtrar por Unidad:", options=df_inst["UNIDAD"].unique() if "UNIDAD" in df_inst.columns else [], default=df_inst["UNIDAD"].unique() if "UNIDAD" in df_inst.columns else [], key="filter_inst_unidad")
+        unidades = st.multiselect("Filtrar por Unidad:", options=df_inst_proc["UNIDAD"].unique() if "UNIDAD" in df_inst_proc.columns else [], default=df_inst_proc["UNIDAD"].unique() if "UNIDAD" in df_inst_proc.columns else [], key="filter_inst_unidad")
         
-    df_filtered_inst = filter_by_year_month(df_inst, "MES", sel_y_inst, sel_m_inst)
+    df_filtered_inst = filter_df(df_inst_proc, sel_years_inst, sel_months_inst)
     if tipos and "TIPO" in df_filtered_inst.columns:
         df_filtered_inst = df_filtered_inst[df_filtered_inst["TIPO"].isin(tipos)]
     if unidades and "UNIDAD" in df_filtered_inst.columns:
@@ -284,7 +267,8 @@ with tab_inst:
         st.plotly_chart(fig_inst_bar, use_container_width=True)
 
     st.subheader("Matriz de Inspección de Campo")
-    edited_inst = st.data_editor(df_filtered_inst, num_rows="dynamic", key="editor_inst")
+    cols_to_show_inst = [c for c in df_filtered_inst.columns if c not in ["Year_Temp", "Month_Temp"]]
+    edited_inst = st.data_editor(df_filtered_inst[cols_to_show_inst], num_rows="dynamic", key="editor_inst")
     if st.button("Guardar Cambios Instrumentación"):
         st.session_state["df_inst"] = edited_inst
         st.success("Matriz de Instrumentación guardada en sesión.")
@@ -297,7 +281,7 @@ with tab_inst:
     )
 
 # =========================================================
-# TAB: ACCIDENTES E INCIDENTES
+# PESTAÑA 4: ACCIDENTES E INCIDENTES
 # =========================================================
 with tab_acc:
     st.header("Registro de Accidentes, Incidentes y Hallazgos")
@@ -307,39 +291,35 @@ with tab_acc:
         st.session_state["df_acc"] = pd.read_excel(uploaded_acc, sheet_name="SEG_ACCIDENTES")
         st.success("Registro de accidentes actualizado.")
 
-    df_acc = st.session_state["df_acc"]
-    years_acc, months_acc = extract_years_and_months(df_acc, "FECHA")
+    df_acc_proc, years_acc, months_acc = extract_year_month(st.session_state["df_acc"], "FECHA")
     
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        sel_y_acc = st.multiselect("📅 Filtrar por Año:", options=years_acc, default=years_acc, key="filter_acc_year")
+        sel_years_acc = st.multiselect("📅 Filtrar por Año:", options=years_acc, default=years_acc, key="filter_acc_year")
     with col_f2:
-        sel_m_acc = st.multiselect(
-            "🗓️ Filtrar por Mes:",
-            options=months_acc,
-            default=months_acc,
-            format_func=lambda x: f"{x:02d} - {MONTH_NAMES.get(x, '')}",
-            key="filter_acc_month"
-        )
+        sel_months_acc = st.multiselect("🗓️ Filtrar por Mes:", options=months_acc, default=months_acc, key="filter_acc_month")
         
-    df_acc_filtered = filter_by_year_month(df_acc, "FECHA", sel_y_acc, sel_m_acc)
+    df_acc_filtered = filter_df(df_acc_proc, sel_years_acc, sel_months_acc)
     
     if not df_acc_filtered.empty:
         c1, c2 = st.columns(2)
         with c1:
-            fig_acc_loc = px.pie(
-                df_acc_filtered, names="UBICACIÓN", title="Eventos Registrados por Ubicación / Área Planta",
-                hole=0.3
-            )
-            st.plotly_chart(fig_acc_loc, use_container_width=True)
+            if "UBICACIÓN" in df_acc_filtered.columns:
+                fig_acc_loc = px.pie(
+                    df_acc_filtered, names="UBICACIÓN", title="Eventos Registrados por Ubicación / Área Planta",
+                    hole=0.3
+                )
+                st.plotly_chart(fig_acc_loc, use_container_width=True)
         with c2:
-            fig_acc_tipo = px.bar(
-                df_acc_filtered, x="TIPO", color="UBICACIÓN", title="Eventos Clasificados por Tipo"
-            )
-            st.plotly_chart(fig_acc_tipo, use_container_width=True)
+            if "TIPO" in df_acc_filtered.columns and "UBICACIÓN" in df_acc_filtered.columns:
+                fig_acc_tipo = px.bar(
+                    df_acc_filtered, x="TIPO", color="UBICACIÓN", title="Eventos Clasificados por Tipo"
+                )
+                st.plotly_chart(fig_acc_tipo, use_container_width=True)
 
     st.subheader("Bitácora y Detalle de Incidentes")
-    edited_acc = st.data_editor(df_acc_filtered, num_rows="dynamic", key="editor_acc")
+    cols_to_show_acc = [c for c in df_acc_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    edited_acc = st.data_editor(df_acc_filtered[cols_to_show_acc], num_rows="dynamic", key="editor_acc")
     if st.button("Guardar Registro de Accidentes"):
         st.session_state["df_acc"] = edited_acc
         st.success("Bitácora de accidentes actualizada.")
@@ -352,7 +332,7 @@ with tab_acc:
     )
 
 # =========================================================
-# TAB: CONTROL OPS
+# PESTAÑA 5: CONTROL OPS
 # =========================================================
 with tab_ops:
     st.header("Control de Observaciones Preventivas de Seguridad (OPS)")
@@ -363,41 +343,37 @@ with tab_ops:
         st.session_state["df_ops_cuota"] = pd.read_excel(uploaded_ops, sheet_name="OPS_CUOTA")
         st.success("Control de OPS actualizado.")
 
-    df_ops_gen = st.session_state["df_ops_gen"]
-    years_ops, months_ops = extract_years_and_months(df_ops_gen, "FECHA")
+    df_ops_proc, years_ops, months_ops = extract_year_month(st.session_state["df_ops_gen"], "FECHA")
     
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        sel_y_ops = st.multiselect("📅 Filtrar por Año:", options=years_ops, default=years_ops, key="filter_ops_year")
+        sel_years_ops = st.multiselect("📅 Filtrar por Año:", options=years_ops, default=years_ops, key="filter_ops_year")
     with col_f2:
-        sel_m_ops = st.multiselect(
-            "🗓️ Filtrar por Mes:",
-            options=months_ops,
-            default=months_ops,
-            format_func=lambda x: f"{x:02d} - {MONTH_NAMES.get(x, '')}",
-            key="filter_ops_month"
-        )
+        sel_months_ops = st.multiselect("🗓️ Filtrar por Mes:", options=months_ops, default=months_ops, key="filter_ops_month")
 
-    df_ops_filtered = filter_by_year_month(df_ops_gen, "FECHA", sel_y_ops, sel_m_ops)
+    df_ops_filtered = filter_df(df_ops_proc, sel_years_ops, sel_months_ops)
 
     if not df_ops_filtered.empty:
         c1, c2 = st.columns(2)
         with c1:
-            fig_ops_area = px.bar(
-                df_ops_filtered, x="ÁREA", color="GRAVEDAD",
-                title="OPS Generadas por Área Operativa y Gravedad",
-                barmode="stack"
-            )
-            st.plotly_chart(fig_ops_area, use_container_width=True)
+            if "ÁREA" in df_ops_filtered.columns and "GRAVEDAD" in df_ops_filtered.columns:
+                fig_ops_area = px.bar(
+                    df_ops_filtered, x="ÁREA", color="GRAVEDAD",
+                    title="OPS Generadas por Área Operativa y Gravedad",
+                    barmode="stack"
+                )
+                st.plotly_chart(fig_ops_area, use_container_width=True)
         with c2:
-            fig_ops_obs = px.bar(
-                df_ops_filtered, x="OBSERVADOR", title="Reporte de OPS por Inspector / Observador",
-                color_discrete_sequence=["#2ca02c"]
-            )
-            st.plotly_chart(fig_ops_obs, use_container_width=True)
+            if "OBSERVADOR" in df_ops_filtered.columns:
+                fig_ops_obs = px.bar(
+                    df_ops_filtered, x="OBSERVADOR", title="Reporte de OPS por Inspector / Observador",
+                    color_discrete_sequence=["#2ca02c"]
+                )
+                st.plotly_chart(fig_ops_obs, use_container_width=True)
 
     st.subheader("Matriz de Observaciones Generadas (OPS)")
-    edited_ops = st.data_editor(df_ops_filtered, num_rows="dynamic", key="editor_ops")
+    cols_to_show_ops = [c for c in df_ops_filtered.columns if c not in ["Year_Temp", "Month_Temp"]]
+    edited_ops = st.data_editor(df_ops_filtered[cols_to_show_ops], num_rows="dynamic", key="editor_ops")
     if st.button("Guardar Cambios OPS"):
         st.session_state["df_ops_gen"] = edited_ops
         st.success("Registros OPS actualizados.")
@@ -408,4 +384,3 @@ with tab_ops:
         file_name="KPI_OPS_ACTUALIZADO.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-```
