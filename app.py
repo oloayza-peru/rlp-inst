@@ -321,7 +321,7 @@ with tab_inst:
         with c2:
             s_mp = st.multiselect("🗓️ Mes:", options=months_p, default=months_p, key="f_p_m")
         with c3:
-            # Filtrar unidades eliminando 'MAX U 63'
+            # Filtrar unidades eliminando 'MAX U 63' de la lista
             units_plan = df_p_proc["UNIDAD"].dropna().astype(str).unique() if "UNIDAD" in df_p_proc.columns else []
             units_plan_clean = [u for u in units_plan if u.strip().upper() != "MAX U 63"]
             s_up = st.multiselect("Unidad:", options=units_plan_clean, key="f_p_u")
@@ -346,18 +346,25 @@ with tab_inst:
         if fig_p_monthly:
             st.plotly_chart(fig_p_monthly, use_container_width=True)
 
-        # Gráfica de Avance por Unidad EXCLUYENDO "MAX U 63"
+        # Gráfica de Avance por Unidad (Rango de Eje X de 0 a 70 y Título Actualizado)
         if not df_p_filt.empty and "UNIDAD" in df_p_filt.columns:
-            df_p_chart = df_p_filt[df_p_filt["UNIDAD"].astype(str).str.strip().str.upper() != "MAX U 63"]
+            df_p_chart = df_p_filt.copy()
+            df_p_chart["UNIDAD_NUM"] = pd.to_numeric(df_p_chart["UNIDAD"], errors="coerce")
+            
+            # Filtrar registros dentro del rango numérico 0 a 70
+            df_p_chart = df_p_chart[(df_p_chart["UNIDAD_NUM"] >= 0) & (df_p_chart["UNIDAD_NUM"] <= 70)]
+            
             if not df_p_chart.empty:
                 fig_p = px.bar(
                     df_p_chart, 
-                    x="UNIDAD", 
+                    x="UNIDAD_NUM", 
                     y="AVANCE DE CAMPO", 
                     color="TIPO", 
-                    title="Avance Plan General por Unidad (Excluye MAX U 63)", 
-                    barmode="group"
+                    title="Avance Plan General por Unidad", 
+                    barmode="group",
+                    labels={"UNIDAD_NUM": "UNIDAD"}
                 )
+                fig_p.update_xaxes(range=[0, 70], dtick=10)
                 st.plotly_chart(fig_p, use_container_width=True)
 
         cols_show_p = [c for c in df_p_filt.columns if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]]
