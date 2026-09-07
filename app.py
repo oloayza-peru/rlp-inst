@@ -204,6 +204,7 @@ def filter_df(df_in, years, months):
   return df_out
 
 
+# TENDENCIA MENSUAL SIN ETIQUETAS
 def plot_monthly_trend(
     df_input,
     date_col="MES",
@@ -239,10 +240,6 @@ def plot_monthly_trend(
           name="Programados",
           marker_color="#1f77b4",
           opacity=0.7,
-          text=df_grouped["Programados"],
-          textposition="outside",
-          textfont=dict(size=12),
-          cliponaxis=False,
       ),
       secondary_y=False,
   )
@@ -252,13 +249,9 @@ def plot_monthly_trend(
           x=df_grouped["Mes_Periodo"],
           y=df_grouped["Inspeccionados"],
           name="Inspeccionados (100%)",
-          mode="lines+markers+text",
-          text=df_grouped["Inspeccionados"],
-          textposition="top center",
-          textfont=dict(size=12, color="black"),
+          mode="lines+markers",
           line=dict(color="#2ca02c", width=3),
           marker=dict(size=8),
-          cliponaxis=False,
       ),
       secondary_y=True,
   )
@@ -288,7 +281,7 @@ def plot_monthly_trend(
   return fig
 
 
-# FUNCIÓN AUXILIAR PARA RENDERIZAR TABLAS CON FILTROS AVANZADOS (AGGRID)
+# FUNCIÓN AUXILIAR PARA RENDERIZAR TABLAS CON AGGRID
 def render_aggrid_table(df_input, height=400):
   cols_clean = [
       c
@@ -298,13 +291,9 @@ def render_aggrid_table(df_input, height=400):
   df_display = df_input[cols_clean].copy()
 
   gb = GridOptionsBuilder.from_dataframe(df_display)
-  gb.configure_pagination(
-      paginationAutoPageSize=False, paginationPageSize=15
-  )  # Paginación
-  gb.configure_side_bar()  # Activa barra lateral de filtros
-  gb.configure_default_column(
-      filterable=True, sortable=True, resizable=True
-  )  # Filtros nativos en cabeceras
+  gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
+  gb.configure_side_bar()
+  gb.configure_default_column(filterable=True, sortable=True, resizable=True)
 
   gridOptions = gb.build()
 
@@ -421,10 +410,6 @@ with tab_resumen:
               "AVANCE DE CAMPO": "Avance Promedio (0-1)",
               "UNIDAD": "Unidad Operativa",
           },
-          text_auto=".2f",
-      )
-      fig_inst_summary.update_traces(
-          textposition="outside", textfont_size=12, cliponaxis=False
       )
       fig_inst_summary.update_xaxes(tickfont=dict(size=12))
       fig_inst_summary.update_yaxes(tickfont=dict(size=12))
@@ -440,9 +425,7 @@ with tab_resumen:
           ),
           hole=0.4,
       )
-      fig_ops_pie.update_traces(
-          textinfo="percent+label", textfont_size=12, insidetextorientation="radial"
-      )
+      fig_ops_pie.update_traces(textinfo="none")
       st.plotly_chart(fig_ops_pie, use_container_width=True)
 
 # =========================================================
@@ -490,10 +473,6 @@ with tab_sst:
           color="Tipo",
           title="Cumplimiento Promedio por Tipo de Actividad SST",
           labels={"% Cumplimiento": "Cumplimiento (0.0 a 1.0)"},
-          text_auto=".2f",
-      )
-      fig_sst_bar.update_traces(
-          textposition="outside", textfont_size=12, cliponaxis=False
       )
       fig_sst_bar.update_xaxes(tickfont=dict(size=12))
       fig_sst_bar.update_yaxes(tickfont=dict(size=12))
@@ -648,10 +627,6 @@ with tab_inst:
             title="Avance Plan General por Unidad",
             barmode="group",
             labels={"UNIDAD_NUM": "UNIDAD"},
-            text_auto=True,
-        )
-        fig_p.update_traces(
-            textposition="outside", textfont_size=12, cliponaxis=False
         )
         fig_p.update_xaxes(
             range=[0, 70], dtick=5, tickfont=dict(size=12), title="Unidad"
@@ -661,7 +636,6 @@ with tab_inst:
 
     st.markdown("---")
     st.subheader("Detalle de los Instrumentos (Interactiva con Filtros)")
-    # RENDERIZADO CON AGGRID
     render_aggrid_table(df_p_filt)
 
   # --- SUBTAB 2: VÁLVULAS VAAR ---
@@ -741,10 +715,6 @@ with tab_inst:
           color="TAG",
           title="Avance Válvulas VAAR por Unidad",
           barmode="group",
-          text_auto=True,
-      )
-      fig_v.update_traces(
-          textposition="outside", textfont_size=12, cliponaxis=False
       )
       fig_v.update_xaxes(tickfont=dict(size=12))
       fig_v.update_yaxes(tickfont=dict(size=12))
@@ -752,7 +722,6 @@ with tab_inst:
 
     st.markdown("---")
     st.subheader("Detalle de Válvulas VAAR (Interactiva con Filtros)")
-    # RENDERIZADO CON AGGRID
     render_aggrid_table(df_v_filt)
 
   # --- SUBTAB 3: SENSORES DE VIBRACIÓN ---
@@ -832,10 +801,6 @@ with tab_inst:
           color="TAG",
           title="Avance Sensores de Vibración por Unidad",
           barmode="group",
-          text_auto=True,
-      )
-      fig_s.update_traces(
-          textposition="outside", textfont_size=12, cliponaxis=False
       )
       fig_s.update_xaxes(tickfont=dict(size=12))
       fig_s.update_yaxes(tickfont=dict(size=12))
@@ -843,7 +808,6 @@ with tab_inst:
 
     st.markdown("---")
     st.subheader("Detalle de Sensores de Vibración (Interactiva con Filtros)")
-    # RENDERIZADO CON AGGRID
     render_aggrid_table(df_s_filt)
 
   st.markdown("---")
@@ -907,11 +871,7 @@ with tab_acc:
             title="Eventos Registrados por Ubicación / Área Planta",
             hole=0.3,
         )
-        fig_acc_loc.update_traces(
-            textinfo="percent+label",
-            textfont_size=12,
-            insidetextorientation="radial",
-        )
+        fig_acc_loc.update_traces(textinfo="none")
         st.plotly_chart(fig_acc_loc, use_container_width=True)
     with c2:
       if (
@@ -923,10 +883,6 @@ with tab_acc:
             x="TIPO",
             color="UBICACIÓN",
             title="Eventos Clasificados por Tipo",
-            text_auto=True,
-        )
-        fig_acc_tipo.update_traces(
-            textposition="outside", textfont_size=12, cliponaxis=False
         )
         fig_acc_tipo.update_xaxes(tickfont=dict(size=12))
         fig_acc_tipo.update_yaxes(tickfont=dict(size=12))
@@ -1005,9 +961,7 @@ with tab_ops:
             color="GRAVEDAD",
             title="OPS Generadas por Área Operativa y Gravedad",
             barmode="stack",
-            text_auto=True,
         )
-        fig_ops_area.update_traces(textfont_size=12)
         fig_ops_area.update_xaxes(tickfont=dict(size=12))
         fig_ops_area.update_yaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_ops_area, use_container_width=True)
@@ -1018,10 +972,6 @@ with tab_ops:
             x="OBSERVADOR",
             title="Reporte de OPS por Inspector / Observador",
             color_discrete_sequence=["#2ca02c"],
-            text_auto=True,
-        )
-        fig_ops_obs.update_traces(
-            textposition="outside", textfont_size=12, cliponaxis=False
         )
         fig_ops_obs.update_xaxes(tickfont=dict(size=12))
         fig_ops_obs.update_yaxes(tickfont=dict(size=12))
