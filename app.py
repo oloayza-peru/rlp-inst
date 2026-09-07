@@ -630,19 +630,61 @@ with tab_inst:
     st.markdown("---")
     st.subheader("Detalle de los Instrumentos")
 
-    event_p = st.dataframe(
-        df_p_filt[
+    # FILTROS DINÁMICOS SOBRE LA TABLA (PLAN GENERAL)
+    tf1, tf2, tf3 = st.columns(3)
+    with tf1:
+      opciones_av_p = (
+          sorted(df_p_filt["AVANCE DE CAMPO"].dropna().unique().tolist())
+          if "AVANCE DE CAMPO" in df_p_filt.columns
+          else []
+      )
+      sel_av_p = st.multiselect(
+          "🔍 Filtrar por Avance de Campo:",
+          options=opciones_av_p,
+          default=opciones_av_p,
+          key="f_table_p_av",
+      )
+    with tf2:
+      opciones_tipo_p = (
+          sorted(df_p_filt["TIPO"].dropna().unique().tolist())
+          if "TIPO" in df_p_filt.columns
+          else []
+      )
+      sel_tipo_p = st.multiselect(
+          "🔍 Filtrar por Tipo:",
+          options=opciones_tipo_p,
+          default=opciones_tipo_p,
+          key="f_table_p_tipo",
+      )
+    with tf3:
+      busqueda_tag_p = st.text_input(
+          "🔎 Buscar por TAG:", value="", key="f_table_p_tag"
+      )
+
+    df_p_display = df_p_filt.copy()
+    if sel_av_p and "AVANCE DE CAMPO" in df_p_display.columns:
+      df_p_display = df_p_display[
+          df_p_display["AVANCE DE CAMPO"].isin(sel_av_p)
+      ]
+    if sel_tipo_p and "TIPO" in df_p_display.columns:
+      df_p_display = df_p_display[df_p_display["TIPO"].isin(sel_tipo_p)]
+    if busqueda_tag_p and "TAG" in df_p_display.columns:
+      df_p_display = df_p_display[
+          df_p_display["TAG"]
+          .astype(str)
+          .str.contains(busqueda_tag_p, case=False, na=False)
+      ]
+
+    st.dataframe(
+        df_p_display[
             [
                 c
-                for c in df_p_filt.columns
+                for c in df_p_display.columns
                 if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
             ]
         ],
         use_container_width=True,
         hide_index=False,
-        on_select="rerun",
-        selection_mode="multi-row",
-        key="df_plan_head",
     )
 
   # --- SUBTAB 2: VÁLVULAS VAAR ---
@@ -734,19 +776,47 @@ with tab_inst:
     st.markdown("---")
     st.subheader("Detalle de Válvulas VAAR")
 
-    event_v = st.dataframe(
-        df_v_filt[
+    # FILTROS DINÁMICOS SOBRE LA TABLA (VAAR)
+    tf1, tf2 = st.columns(2)
+    with tf1:
+      opciones_av_v = (
+          sorted(df_v_filt["AVANCE DE CAMPO"].dropna().unique().tolist())
+          if "AVANCE DE CAMPO" in df_v_filt.columns
+          else []
+      )
+      sel_av_v = st.multiselect(
+          "🔍 Filtrar por Avance de Campo:",
+          options=opciones_av_v,
+          default=opciones_av_v,
+          key="f_table_v_av",
+      )
+    with tf2:
+      busqueda_tag_v = st.text_input(
+          "🔎 Buscar por TAG:", value="", key="f_table_v_tag"
+      )
+
+    df_v_display = df_v_filt.copy()
+    if sel_av_v and "AVANCE DE CAMPO" in df_v_display.columns:
+      df_v_display = df_v_display[
+          df_v_display["AVANCE DE CAMPO"].isin(sel_av_v)
+      ]
+    if busqueda_tag_v and "TAG" in df_v_display.columns:
+      df_v_display = df_v_display[
+          df_v_display["TAG"]
+          .astype(str)
+          .str.contains(busqueda_tag_v, case=False, na=False)
+      ]
+
+    st.dataframe(
+        df_v_display[
             [
                 c
-                for c in df_v_filt.columns
+                for c in df_v_display.columns
                 if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
             ]
         ],
         use_container_width=True,
         hide_index=False,
-        on_select="rerun",
-        selection_mode="multi-row",
-        key="df_vaar_head",
     )
 
   # --- SUBTAB 3: SENSORES DE VIBRACIÓN ---
@@ -838,19 +908,47 @@ with tab_inst:
     st.markdown("---")
     st.subheader("Detalle de Sensores de Vibración")
 
-    event_s = st.dataframe(
-        df_s_filt[
+    # FILTROS DINÁMICOS SOBRE LA TABLA (SENSORES)
+    tf1, tf2 = st.columns(2)
+    with tf1:
+      opciones_av_s = (
+          sorted(df_s_filt["AVANCE DE CAMPO"].dropna().unique().tolist())
+          if "AVANCE DE CAMPO" in df_s_filt.columns
+          else []
+      )
+      sel_av_s = st.multiselect(
+          "🔍 Filtrar por Avance de Campo:",
+          options=opciones_av_s,
+          default=opciones_av_s,
+          key="f_table_s_av",
+      )
+    with tf2:
+      busqueda_tag_s = st.text_input(
+          "🔎 Buscar por TAG:", value="", key="f_table_s_tag"
+      )
+
+    df_s_display = df_s_filt.copy()
+    if sel_av_s and "AVANCE DE CAMPO" in df_s_display.columns:
+      df_s_display = df_s_display[
+          df_s_display["AVANCE DE CAMPO"].isin(sel_av_s)
+      ]
+    if busqueda_tag_s and "TAG" in df_s_display.columns:
+      df_s_display = df_s_display[
+          df_s_display["TAG"]
+          .astype(str)
+          .str.contains(busqueda_tag_s, case=False, na=False)
+      ]
+
+    st.dataframe(
+        df_s_display[
             [
                 c
-                for c in df_s_filt.columns
+                for c in df_s_display.columns
                 if c not in ["Year_Temp", "Month_Temp", "Month_Num_Temp"]
             ]
         ],
         use_container_width=True,
         hide_index=False,
-        on_select="rerun",
-        selection_mode="multi-row",
-        key="df_sens_head",
     )
 
   st.markdown("---")
